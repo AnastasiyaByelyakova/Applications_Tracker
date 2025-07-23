@@ -27,6 +27,18 @@ app.add_middleware(
 db = Database()
 ai_service = AIService()
 
+
+# Add startup and shutdown events for the database connection pool
+@app.on_event("startup")
+async def startup_event():
+    await db.connect()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await db.close()
+
+
 # Create uploads directory if it doesn't exist
 os.makedirs("uploads", exist_ok=True)
 
@@ -79,6 +91,7 @@ async def get_profile():
 
 @app.post("/api/profile")
 async def save_profile(profile: UserProfile):  # Add type hint for profile
+    # Convert Pydantic model to dict for database storage
     return await db.save_profile(profile.dict())
 
 

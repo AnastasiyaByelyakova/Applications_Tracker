@@ -21,6 +21,14 @@ document.addEventListener('DOMContentLoaded', function() {
     loadProfile();
     // Show the applications tab by default
     showTab('applications', document.querySelector('.nav-tab[data-tab="applications"]'));
+
+    // Explicitly hide all AI tool loading and result divs on page load
+    document.getElementById('chance-loading').style.display = 'none';
+    document.getElementById('chance-result').style.display = 'none';
+    document.getElementById('cv-loading').style.display = 'none';
+    document.getElementById('cv-result').style.display = 'none';
+    document.getElementById('fill-profile-loading').style.display = 'none';
+    document.getElementById('fill-profile-result').style.display = 'none';
 });
 
 // Initialize all event listeners
@@ -132,7 +140,7 @@ function renderApplications() {
             <td>
                 <button class="btn btn-info btn-sm" onclick="viewApplication('${app.id}')">View</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteApplication('${app.id}')">Delete</button>
-            </td>
+            </div>
         `;
         applicationsTableBody.appendChild(row);
     });
