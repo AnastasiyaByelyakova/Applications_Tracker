@@ -19,6 +19,11 @@ let currentFilterTextExperience = '';
 let currentCalendarDate = new Date(); // For calendar navigation
 let currentDashboardDate = new Date(); // For dashboard month selection
 
+// New global variables for interview table sorting
+let currentSortColumnInterviews = 'start_datetime';
+let currentSortDirectionInterviews = 'asc';
+
+
 // Chart instances to allow for updates
 let applicationsStatusChartInstance = null;
 let interviewsCountChartInstance = null;
@@ -1048,6 +1053,8 @@ async function loadInterviews() {
         console.log('Loaded interviews (with IDs):', interviews); // Debugging: Check IDs here
         renderCalendar(); // Re-render calendar after loading interviews
         renderMonthlyInterviewList(); // Render the list of interviews for the month
+        renderMiniCalendar('mini-calendar-next-1', new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() + 1, 1));
+        renderMiniCalendar('mini-calendar-next-2', new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() + 2, 1));
     } catch (error) {
         console.error('Error loading interviews:', error);
         showAlert('Failed to load interviews. Please try again.', 'error');
@@ -1110,6 +1117,76 @@ function renderCalendar() {
         daysGrid.appendChild(dayCell);
     }
 }
+
+/**
+ * Renders a mini calendar grid for a given month.
+ * @param {string} targetElementId The ID of the HTML element to render the mini-calendar into.
+ * @param {Date} displayDate A Date object representing the month to display (e.g., new Date(year, month, 1)).
+ */
+function renderMiniCalendar(targetElementId, displayDate) {
+    const miniCalendarContainer = document.getElementById(targetElementId);
+    if (!miniCalendarContainer) {
+        console.error(`Mini calendar target element not found: ${targetElementId}`);
+        return;
+    }
+    miniCalendarContainer.innerHTML = ''; // Clear previous content
+
+    const year = displayDate.getFullYear();
+    const month = displayDate.getMonth(); // 0-indexed
+
+    const monthName = displayDate.toLocaleString('default', { month: 'short' });
+
+    const miniHeader = document.createElement('div');
+    miniHeader.className = 'mini-calendar-header';
+    miniHeader.innerHTML = `<h4>${monthName} ${year}</h4>`;
+    miniCalendarContainer.appendChild(miniHeader);
+
+    const miniGrid = document.createElement('div');
+    miniGrid.className = 'mini-calendar-grid';
+    miniCalendarContainer.appendChild(miniGrid);
+
+    const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    dayHeaders.forEach(day => {
+        const header = document.createElement('div');
+        header.className = 'mini-calendar-day-header';
+        header.textContent = day.substring(0, 1); // Just first letter
+        miniGrid.appendChild(header);
+    });
+
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Add empty cells for leading days
+    for (let i = 0; i < firstDayOfMonth; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'mini-calendar-day empty';
+        miniGrid.appendChild(emptyCell);
+    }
+
+    // Add days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dayCell = document.createElement('div');
+        dayCell.className = 'mini-calendar-day';
+        dayCell.innerHTML = `<span class="mini-day-number">${day}</span>`;
+
+        // Add a small indicator if there's an interview on this day
+        const hasInterview = interviews.some(interview => {
+            const interviewStart = new Date(interview.start_datetime);
+            return interviewStart.getDate() === day &&
+                   interviewStart.getMonth() === month &&
+                   interviewStart.getFullYear() === year;
+        });
+
+        if (hasInterview) {
+            const indicator = document.createElement('div');
+            indicator.className = 'mini-event-indicator';
+            dayCell.appendChild(indicator);
+        }
+
+        miniGrid.appendChild(dayCell);
+    }
+}
+
 
 function changeMonth(delta) {
     currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
@@ -1304,27 +1381,62 @@ function hideInterviewDetailModal() {
 
 // --- Monthly Interview List Function ---
 function renderMonthlyInterviewList() {
-    const monthlyListDiv = document.getElementById('monthly-interview-list');
-    monthlyListDiv.innerHTML = ''; // Clear previous list
+    const monthlyListContainer = document.getElementById('monthly-interview-list');
+    monthlyListContainer.innerHTML = ''; // Clear previous list
 
-    // Filter interviews for the current month and sort them by date/time
-    const currentMonthInterviews = interviews.filter(interview => {
+    // Filter interviews for the current month and sort them
+    let currentMonthInterviews = interviews.filter(interview => {
         const interviewDate = new Date(interview.start_datetime);
-        return isValidDate(interviewDate) && // Ensure date is valid before comparison
+        return isValidDate(interviewDate) &&
                interviewDate.getFullYear() === currentCalendarDate.getFullYear() &&
                interviewDate.getMonth() === currentCalendarDate.getMonth();
-    }).sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime));
+    });
+
+    // Sort interviews based on current sort column and direction
+    currentMonthInterviews.sort((a, b) => {
+        let valA = a[currentSortColumnInterviews];
+        let valB = b[currentSortColumnInterviews];
+
+        // Handle date/time sorting for start_datetime
+        if (currentSortColumnInterviews === 'start_datetime') {
+            valA = new Date(valA);
+            valB = new Date(valB);
+        } else if (currentSortColumnInterviews === 'interview_title' || currentSortColumnInterviews === 'location' || currentSortColumnInterviews === 'interview_type') {
+            valA = String(valA).toLowerCase();
+            valB = String(valB).toLowerCase();
+        }
+
+        if (valA < valB) return currentSortDirectionInterviews === 'asc' ? -1 : 1;
+        if (valA > valB) return currentSortDirectionInterviews === 'asc' ? 1 : -1;
+        return 0;
+    });
 
     if (currentMonthInterviews.length === 0) {
-        monthlyListDiv.innerHTML = '<p>No interviews scheduled for this month.</p>';
+        monthlyListContainer.innerHTML = '<p>No interviews scheduled for this month.</p>';
         return;
     }
 
-    const ul = document.createElement('ul');
-    ul.className = 'interview-list-compact'; // Add a class for styling
+    const table = document.createElement('table');
+    table.className = 'interview-list-table'; // Use a class for styling, similar to applications table
+    table.innerHTML = `
+        <thead>
+            <tr>
+                <th onclick="sortTableInterviews('start_datetime')">Date & Time</th>
+                <th onclick="sortTableInterviews('interview_title')">Title</th>
+                <th onclick="sortTableInterviews('location')">Location</th>
+                <th onclick="sortTableInterviews('interview_type')">Type</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="interviews-table-body">
+            <!-- Interview rows will be rendered here -->
+        </tbody>
+    `;
+    monthlyListContainer.appendChild(table);
 
+    const tableBody = document.getElementById('interviews-table-body');
     currentMonthInterviews.forEach(interview => {
-        const li = document.createElement('li');
+        const row = document.createElement('tr');
         const startDt = new Date(interview.start_datetime);
         const endDt = new Date(interview.end_datetime);
 
@@ -1332,21 +1444,28 @@ function renderMonthlyInterviewList() {
         const timeStr = isValidDate(startDt) && isValidDate(endDt) ?
                         `${startDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '';
 
-        li.innerHTML = `
-            <div class="interview-list-item">
-                <span class="interview-list-date">${dateStr}</span>
-                <span class="interview-list-time">${timeStr}</span>
-                <span class="interview-list-title">${interview.interview_title}</span>
-                <span class="interview-list-location">${interview.location || 'N/A'}</span>
-                <div class="interview-list-actions">
-                    <button class="btn btn-info btn-sm" onclick="viewInterviewDetails('${interview.id}')">View</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteInterview('${interview.id}')">Delete</button>
-                </div>
-            </div>
+        row.innerHTML = `
+            <td>${dateStr} ${timeStr}</td>
+            <td>${interview.interview_title}</td>
+            <td>${interview.location || 'N/A'}</td>
+            <td>${interview.interview_type || 'N/A'}</td>
+            <td>
+                <button class="btn btn-info btn-sm" onclick="viewInterviewDetails('${interview.id}')">View</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteInterview('${interview.id}')">Delete</button>
+            </td>
         `;
-        ul.appendChild(li);
+        tableBody.appendChild(row);
     });
-    monthlyListDiv.appendChild(ul);
+}
+
+function sortTableInterviews(column) {
+    if (currentSortColumnInterviews === column) {
+        currentSortDirectionInterviews = currentSortDirectionInterviews === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSortColumnInterviews = column;
+        currentSortDirectionInterviews = 'asc';
+    }
+    renderMonthlyInterviewList(); // Re-render to apply new sort order
 }
 
 
@@ -1761,4 +1880,5 @@ window.closeApplicationDetailModal = closeApplicationDetailModal; // Expose clos
 window.viewInterviewDetails = viewInterviewDetails; // Expose for dynamically created calendar events
 window.hideInterviewFormModal = hideInterviewFormModal;
 window.hideInterviewDetailModal = hideInterviewDetailModal;
-window.deleteInterview = deleteInterview; // <--- ADDED THIS LINE
+window.deleteInterview = deleteInterview;
+window.sortTableInterviews = sortTableInterviews; // Expose sortTableInterviews
