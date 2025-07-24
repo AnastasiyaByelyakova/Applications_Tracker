@@ -1,6 +1,7 @@
 // Global variables
 let applications = [];
 let profile = {};
+let interviews = []; // New: Stores interview data
 let currentSortColumnApplications = 'application_date';
 let currentSortDirectionApplications = 'desc';
 let currentFilterTextApplications = '';
@@ -13,6 +14,8 @@ let currentFilterTextEducation = '';
 let currentSortColumnExperience = 'start_date';
 let currentSortDirectionExperience = 'desc';
 let currentFilterTextExperience = '';
+
+let currentCalendarDate = new Date(); // New: For calendar navigation
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', function() {
@@ -38,6 +41,9 @@ function initializeEventListeners() {
         tab.addEventListener('click', function() {
             const tabName = this.getAttribute('data-tab');
             showTab(tabName, this);
+            if (tabName === 'calendar') {
+                loadInterviews(); // Load interviews when calendar tab is shown
+            }
         });
     });
 
@@ -64,6 +70,12 @@ function initializeEventListeners() {
     document.getElementById('estimate-chance-btn').addEventListener('click', estimateJobChance);
     document.getElementById('tune-cv-btn').addEventListener('click', tuneCv);
     document.getElementById('fill-profile-btn').addEventListener('click', fillProfileFromResumeAI);
+
+    // Calendar events
+    document.getElementById('prev-month-btn').addEventListener('click', () => changeMonth(-1));
+    document.getElementById('next-month-btn').addEventListener('click', () => changeMonth(1));
+    document.getElementById('add-interview-btn').addEventListener('click', showInterviewFormModal);
+    document.getElementById('interview-form').addEventListener('submit', handleInterviewFormSubmit);
 }
 
 // Function to show/hide tabs
@@ -198,7 +210,7 @@ async function addApplication(event) {
     const company = document.getElementById('company').value;
     const description = document.getElementById('description').value;
     const link = document.getElementById('link').value;
-    const applicationDate = document.getElementById('application-date').value;
+    const applicationDate = document.getElementById('application-date').value; // This will be set by JS if empty
     const status = document.getElementById('status').value;
     const cvFile = document.getElementById('cv-file').files[0];
     const coverLetter = document.getElementById('cover-letter').value;
@@ -229,7 +241,7 @@ async function addApplication(event) {
         company: company,
         description: description,
         link: link,
-        application_date: applicationDate,
+        application_date: applicationDate || new Date().toISOString().split('T')[0], // Set default if empty
         status: status,
         cv_file: cvFilePath,
         cover_letter: coverLetter
@@ -355,6 +367,8 @@ function closeApplicationDetailModal() {
 function showAddApplicationForm() {
     document.getElementById('add-application-form').style.display = 'block';
     document.getElementById('add-app-btn').style.display = 'none';
+    // Set default application date to today
+    document.getElementById('application-date').value = new Date().toISOString().split('T')[0];
 }
 
 function hideAddApplicationForm() {
@@ -384,7 +398,7 @@ async function loadProfile() {
             profile = { // Initialize with empty lists if no profile exists
                 full_name: "", email: "", phone: "", location: "", summary: "",
                 education: [], experience: [], skills: [], languages: [], certifications: [],
-                linkedin_url: "", github_url: "", portfolio_url: "", cv_profile_file: ""
+                linkedin_url: "", github_url: "", portfolio_url: "", "cv_profile_file": "" // Ensure cv_profile_file is initialized
             };
         }
     } catch (error) {
@@ -393,7 +407,7 @@ async function loadProfile() {
         profile = { // Fallback to empty profile on error
             full_name: "", email: "", phone: "", location: "", summary: "",
             education: [], experience: [], skills: [], languages: [], certifications: [],
-            linkedin_url: "", github_url: "", portfolio_url: "", cv_profile_file: ""
+            linkedin_url: "", github_url: "", portfolio_url: "", "cv_profile_file": "" // Ensure cv_profile_file is initialized
         };
     }
 }
@@ -966,7 +980,355 @@ async function fillProfileFromResumeAI() {
 }
 
 
+// --- Calendar Functions ---
+
+async function loadInterviews() {
+    try {
+        const year = currentCalendarDate.getFullYear();
+        const month = currentCalendarDate.getMonth() + 1; // Months are 0-indexed in JS, 1-indexed in API
+
+        // Fetch all interviews for the current month/year
+        const response = await fetch(`/api/interviews?year=${year}&month=${month}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        interviews = await response.json();
+        console.log('Loaded interviews (with IDs):', interviews); // Debugging: Check IDs here
+        renderCalendar(); // Re-render calendar after loading interviews
+        renderMonthlyInterviewList(); // Render the list of interviews for the month
+    } catch (error) {
+        console.error('Error loading interviews:', error);
+        showAlert('Failed to load interviews. Please try again.', 'error');
+    }
+}
+
+function renderCalendar() {
+    const monthYearDisplay = document.getElementById('current-month-year');
+    const daysGrid = document.getElementById('calendar-days-grid');
+    daysGrid.innerHTML = ''; // Clear previous days
+
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth(); // 0-indexed
+
+    monthYearDisplay.textContent = new Date(year, month).toLocaleString('default', { month: 'long', year: 'numeric' });
+
+    const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 for Sunday, 1 for Monday, etc.
+    const daysInMonth = new Date(year, month + 1, 0).getDate(); // Last day of current month
+
+    // Add empty cells for leading days
+    for (let i = 0; i < firstDayOfMonth; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'calendar-day empty';
+        daysGrid.appendChild(emptyCell);
+    }
+
+    // Add days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dayCell = document.createElement('div');
+        dayCell.className = 'calendar-day';
+        dayCell.innerHTML = `<span class="day-number">${day}</span>`;
+
+        // Add interviews to the day cell
+        const interviewsForDay = interviews.filter(interview => {
+            const interviewStart = new Date(interview.start_datetime);
+            return interviewStart.getDate() === day &&
+                   interviewStart.getMonth() === month &&
+                   interviewStart.getFullYear() === year;
+        });
+
+        interviewsForDay.sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime));
+
+        interviewsForDay.forEach(interview => {
+            const interviewTime = new Date(interview.start_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const interviewElement = document.createElement('div');
+            interviewElement.className = 'calendar-event';
+            // Ensure interview.id is a string, or convert it to string if it's a number
+            interviewElement.dataset.interviewId = String(interview.id);
+            interviewElement.innerHTML = `
+                <span class="event-time">${interviewTime}</span>
+                <span class="event-title">${interview.interview_title}</span>
+            `;
+            interviewElement.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent triggering day cell click
+                viewInterviewDetails(interview.id);
+            });
+            dayCell.appendChild(interviewElement);
+        });
+
+        daysGrid.appendChild(dayCell);
+    }
+}
+
+function changeMonth(delta) {
+    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+    loadInterviews(); // Reload interviews for the new month
+}
+
+// Removed populateApplicationSelect as interviews are no longer linked to applications
+
+async function showInterviewFormModal(interview = null) {
+    console.log('showInterviewFormModal called with interview:', interview); // Debugging log
+    const modal = document.getElementById('interview-form-modal');
+    const form = document.getElementById('interview-form');
+    const modalTitle = document.getElementById('interview-modal-title');
+    form.reset(); // Clear form
+
+    // Removed call to populateApplicationSelect();
+
+    if (interview) {
+        console.log('Editing Interview Object:', interview); // Debugging: Log the entire object
+        console.log('Editing Interview ID from object:', interview.id); // Debugging log
+        modalTitle.textContent = 'Edit Interview';
+        // Ensure the ID is always a string or empty string
+        document.getElementById('interview-id').value = interview.id ? String(interview.id) : '';
+        document.getElementById('interview-title').value = interview.interview_title;
+
+        // Safely set date and time values
+        const startDate = new Date(interview.start_datetime);
+        const endDate = new Date(interview.end_datetime);
+
+        document.getElementById('interview-date').value = isValidDate(startDate) ? startDate.toISOString().split('T')[0] : '';
+        document.getElementById('interview-start-time').value = isValidDate(startDate) ? startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+        document.getElementById('interview-end-time').value = isValidDate(endDate) ? endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+
+        document.getElementById('interview-location').value = interview.location || '';
+        document.getElementById('interview-type').value = interview.interview_type || '';
+        document.getElementById('interview-notes').value = interview.notes || '';
+    } else {
+        console.log('Scheduling new interview.'); // Debugging log
+        modalTitle.textContent = 'Schedule New Interview';
+        document.getElementById('interview-id').value = ''; // Clear ID for new interview
+        // Set default date to today for new interviews
+        document.getElementById('interview-date').value = new Date().toISOString().split('T')[0];
+        // Set default times for new interviews (e.g., 9:00 AM to 10:00 AM)
+        document.getElementById('interview-start-time').value = '09:00';
+        document.getElementById('interview-end-time').value = '10:00';
+    }
+    modal.classList.add('active');
+}
+
+function hideInterviewFormModal() {
+    document.getElementById('interview-form-modal').classList.remove('active');
+}
+
+async function handleInterviewFormSubmit(event) {
+    event.preventDefault();
+
+    const interviewId = document.getElementById('interview-id').value;
+    console.log('handleInterviewFormSubmit - interviewId from hidden input (before sending):', interviewId); // Debugging log
+
+    // Removed jobApplicationId
+    const interviewTitle = document.getElementById('interview-title').value;
+    const interviewDate = document.getElementById('interview-date').value;
+    const startTime = document.getElementById('interview-start-time').value;
+    const endTime = document.getElementById('interview-end-time').value;
+    const location = document.getElementById('interview-location').value;
+    const type = document.getElementById('interview-type').value;
+    const notes = document.getElementById('interview-notes').value;
+
+    // Basic validation
+    if (!interviewTitle || !interviewDate || !startTime || !endTime) { // Simplified validation
+        showAlert('Please fill in all required interview fields (Title, Date, Start/End Time).', 'error');
+        return;
+    }
+
+    // Combine date and time into full datetime strings
+    const startDatetime = `${interviewDate}T${startTime}:00`;
+    const endDatetime = `${interviewDate}T${endTime}:00`;
+
+    // Client-side overlap check
+    const newStart = new Date(startDatetime);
+    const newEnd = new Date(endDatetime);
+
+    if (newStart >= newEnd) {
+        showAlert('End time must be after start time.', 'error');
+        return;
+    }
+
+    const hasOverlap = interviews.some(existingInterview => {
+        // Exclude the current interview if we are editing
+        if (interviewId && String(existingInterview.id) === interviewId) { // Compare as strings
+            return false;
+        }
+
+        const existingStart = new Date(existingInterview.start_datetime);
+        const existingEnd = new Date(existingInterview.end_datetime);
+
+        // Check for overlap: (start1 < end2) and (end1 > start2)
+        return (newStart < existingEnd) && (newEnd > existingStart);
+    });
+
+    if (hasOverlap) {
+        showAlert('This interview time overlaps with an existing interview. Please choose a different time.', 'error');
+        return;
+    }
+
+    const interviewData = {
+        // Removed job_application_id
+        interview_title: interviewTitle,
+        start_datetime: startDatetime,
+        end_datetime: endDatetime,
+        location: location,
+        notes: notes,
+        interview_type: type
+    };
+
+    try {
+        let response;
+        let method;
+        let url;
+
+        if (interviewId) {
+            method = 'PUT';
+            url = `/api/interviews/${interviewId}`;
+            // interviewData.id = interviewId; // No need to send ID in body for PUT, it's in URL
+        } else {
+            method = 'POST';
+            url = '/api/interviews';
+        }
+
+        console.log('Sending interview data:', interviewData); // Debugging: What's being sent
+        console.log('Sending to URL:', url, 'with method:', method); // Debugging: What URL/Method
+
+        response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(interviewData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to save interview.');
+        }
+
+        showAlert('Interview saved successfully!', 'success');
+        hideInterviewFormModal();
+        loadInterviews(); // Reload interviews to update calendar and list
+    } catch (error) {
+        console.error('Error saving interview:', error);
+        showAlert('Error saving interview: ' + error.message, 'error');
+    }
+}
+
+
+async function viewInterviewDetails(id) {
+    const interview = interviews.find(i => String(i.id) === String(id)); // Ensure string comparison
+    if (!interview) {
+        showAlert('Interview details not found.', 'error');
+        return;
+    }
+    console.log('Viewing interview details for:', interview); // Debugging: Check the interview object here
+
+    const detailModal = document.getElementById('interview-detail-modal');
+    document.getElementById('detail-interview-title').textContent = interview.interview_title;
+
+    const startDt = new Date(interview.start_datetime);
+    const endDt = new Date(interview.end_datetime);
+    document.getElementById('detail-interview-time').textContent =
+        `${isValidDate(startDt) ? startDt.toLocaleDateString() : 'Invalid Date'} ${isValidDate(startDt) ? startDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''} - ${isValidDate(endDt) ? endDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}`;
+
+    document.getElementById('detail-interview-location').textContent = interview.location || 'N/A';
+    document.getElementById('detail-interview-type').textContent = interview.interview_type || 'N/A';
+    document.getElementById('detail-interview-notes').textContent = interview.notes || 'No notes.';
+
+    // Set up Edit and Delete buttons in detail modal
+    document.getElementById('edit-interview-btn').onclick = () => {
+        hideInterviewDetailModal();
+        showInterviewFormModal(interview);
+    };
+    document.getElementById('delete-interview-btn').onclick = () => {
+        hideInterviewDetailModal();
+        deleteInterview(interview.id);
+    };
+
+    detailModal.classList.add('active');
+}
+
+function hideInterviewDetailModal() {
+    document.getElementById('interview-detail-modal').classList.remove('active');
+}
+
+async function deleteInterview(id) {
+    showConfirm('Are you sure you want to delete this interview?', async () => {
+        try {
+            const response = await fetch(`/api/interviews/${id}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            showAlert('Interview deleted successfully!', 'success');
+            loadInterviews(); // Reload interviews to update calendar and list
+        } catch (error) {
+            console.error('Error deleting interview:', error);
+            showAlert('Failed to delete interview. Please try again.', 'error');
+        }
+    });
+}
+
+// --- Monthly Interview List Function ---
+function renderMonthlyInterviewList() {
+    const monthlyListDiv = document.getElementById('monthly-interview-list');
+    monthlyListDiv.innerHTML = ''; // Clear previous list
+
+    // Filter interviews for the current month and sort them by date/time
+    const currentMonthInterviews = interviews.filter(interview => {
+        const interviewDate = new Date(interview.start_datetime);
+        return isValidDate(interviewDate) && // Ensure date is valid before comparison
+               interviewDate.getFullYear() === currentCalendarDate.getFullYear() &&
+               interviewDate.getMonth() === currentCalendarDate.getMonth();
+    }).sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime));
+
+    if (currentMonthInterviews.length === 0) {
+        monthlyListDiv.innerHTML = '<p>No interviews scheduled for this month.</p>';
+        return;
+    }
+
+    const ul = document.createElement('ul');
+    ul.className = 'interview-list-compact'; // Add a class for styling
+
+    currentMonthInterviews.forEach(interview => {
+        const li = document.createElement('li');
+        const startDt = new Date(interview.start_datetime);
+        const endDt = new Date(interview.end_datetime);
+
+        const dateStr = isValidDate(startDt) ? startDt.toLocaleDateString() : 'Invalid Date';
+        const timeStr = isValidDate(startDt) && isValidDate(endDt) ?
+                        `${startDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '';
+
+        li.innerHTML = `
+            <div class="interview-list-item">
+                <span class="interview-list-date">${dateStr}</span>
+                <span class="interview-list-time">${timeStr}</span>
+                <span class="interview-list-title">${interview.interview_title}</span>
+                <span class="interview-list-location">${interview.location || 'N/A'}</span>
+                <div class="interview-list-actions">
+                    <button class="btn btn-info btn-sm" onclick="viewInterviewDetails('${interview.id}')">View</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteInterview('${interview.id}')">Delete</button>
+                </div>
+            </div>
+        `;
+        ul.appendChild(li);
+    });
+    monthlyListDiv.appendChild(ul);
+}
+
+
 // --- Utility Functions ---
+
+/**
+ * Checks if a Date object is valid.
+ * @param {Date} date The Date object to check.
+ * @returns {boolean} True if the date is valid, false otherwise.
+ */
+function isValidDate(date) {
+    return date instanceof Date && !isNaN(date);
+}
+
 
 function showAlert(message, type = 'info') {
     const alertBox = document.createElement('div');
@@ -1023,3 +1385,6 @@ window.updateLanguage = updateLanguage;
 window.removeCertification = removeCertification;
 window.updateCertification = updateCertification;
 window.closeApplicationDetailModal = closeApplicationDetailModal; // Expose close function for the modal
+window.viewInterviewDetails = viewInterviewDetails; // Expose for dynamically created calendar events
+window.hideInterviewFormModal = hideInterviewFormModal;
+window.hideInterviewDetailModal = hideInterviewDetailModal;

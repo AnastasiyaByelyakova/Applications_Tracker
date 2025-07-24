@@ -3,16 +3,19 @@ from typing import Optional, List
 from datetime import datetime
 from enum import Enum
 
+
 class ApplicationStatus(str, Enum):
     APPLIED = "Applied"
     INTERVIEW = "Interview"
     REJECTION = "Rejection"
     OFFER = "Offer"
 
+
 class AIProvider(str, Enum):
     OPENAI = "openai"
     GEMINI = "gemini"
     CLAUDE = "claude"
+
 
 class JobApplication(BaseModel):
     id: Optional[str] = None
@@ -24,15 +27,17 @@ class JobApplication(BaseModel):
     status: ApplicationStatus = ApplicationStatus.APPLIED
     cv_file: Optional[str] = None
     cover_letter: Optional[str] = None
-    
+
     class Config:
         use_enum_values = True
+
 
 class Education(BaseModel):
     degree: str
     institution: str
     graduation_year: int
     gpa: Optional[float] = None
+
 
 class Experience(BaseModel):
     position: str
@@ -41,9 +46,11 @@ class Experience(BaseModel):
     end_date: Optional[str] = None
     description: str
 
+
 class Skill(BaseModel):
     name: str
     level: str  # Beginner, Intermediate, Advanced, Expert
+
 
 class UserProfile(BaseModel):
     id: Optional[str] = None
@@ -60,7 +67,20 @@ class UserProfile(BaseModel):
     linkedin_url: Optional[str] = None
     github_url: Optional[str] = None
     portfolio_url: Optional[str] = None
-    cv_profile_file: Optional[str] = None  # CV file for the profile
-    
+    cv_profile_file: Optional[str] = None
+
+
+class Interview(BaseModel):
+    id: Optional[str] = None
+    interview_title: str
+    start_datetime: datetime
+    end_datetime: datetime
+    location: Optional[str] = None
+    notes: Optional[str] = None
+    interview_type: Optional[str] = None
+
     class Config:
-        use_enum_values = True
+        json_encoders = {
+            datetime: lambda dt: dt.isoformat()
+        }
+        from_attributes = True  # Use from_attributes instead of orm_mode for Pydantic v2
