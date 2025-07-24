@@ -1,7 +1,8 @@
 // Global variables
-let applications = [];
+let applications = []; // Filtered applications for the main applications tab
+let allApplications = []; // All applications for dashboard calculations
 let profile = {};
-let interviews = []; // New: Stores interview data
+let interviews = []; // Stores interview data
 let currentSortColumnApplications = 'application_date';
 let currentSortDirectionApplications = 'desc';
 let currentFilterTextApplications = '';
@@ -15,12 +16,32 @@ let currentSortColumnExperience = 'start_date';
 let currentSortDirectionExperience = 'desc';
 let currentFilterTextExperience = '';
 
-let currentCalendarDate = new Date(); // New: For calendar navigation
+let currentCalendarDate = new Date(); // For calendar navigation
+let currentDashboardDate = new Date(); // For dashboard month selection
+
+// Chart instances to allow for updates
+let applicationsStatusChartInstance = null;
+let interviewsCountChartInstance = null;
+let applicationTrendChartInstance = null;
+let interviewTypeChartInstance = null;
+
+// References to the global confirmation modal elements
+let globalConfirmModal;
+let globalConfirmMessage;
+let globalConfirmYesBtn;
+let globalConfirmNoBtn;
+
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', function() {
+    // Get references to global confirm modal elements
+    globalConfirmModal = document.getElementById('global-confirm-modal');
+    globalConfirmMessage = document.getElementById('global-confirm-message');
+    globalConfirmYesBtn = document.getElementById('global-confirm-yes');
+    globalConfirmNoBtn = document.getElementById('global-confirm-no');
+
     initializeEventListeners();
-    loadApplications();
+    loadApplications(); // Load applications for the main tab
     loadProfile();
     // Show the applications tab by default
     showTab('applications', document.querySelector('.nav-tab[data-tab="applications"]'));
@@ -43,6 +64,12 @@ function initializeEventListeners() {
             showTab(tabName, this);
             if (tabName === 'calendar') {
                 loadInterviews(); // Load interviews when calendar tab is shown
+            } else if (tabName === 'dashboard') {
+                // Set dashboard month selector to current month by default
+                const year = currentDashboardDate.getFullYear();
+                const month = (currentDashboardDate.getMonth() + 1).toString().padStart(2, '0');
+                document.getElementById('dashboard-month-select').value = `${year}-${month}`;
+                loadDashboardData(); // Load data for dashboard when tab is shown
             }
         });
     });
@@ -76,6 +103,13 @@ function initializeEventListeners() {
     document.getElementById('next-month-btn').addEventListener('click', () => changeMonth(1));
     document.getElementById('add-interview-btn').addEventListener('click', showInterviewFormModal);
     document.getElementById('interview-form').addEventListener('submit', handleInterviewFormSubmit);
+
+    // Dashboard events
+    document.getElementById('dashboard-month-select').addEventListener('change', function() {
+        const [year, month] = this.value.split('-').map(Number);
+        currentDashboardDate = new Date(year, month - 1, 1); // Month is 0-indexed for Date object
+        loadDashboardData();
+    });
 }
 
 // Function to show/hide tabs
@@ -301,23 +335,41 @@ async function updateApplicationStatus(id, newStatus) {
 }
 
 async function deleteApplication(id) {
-    // Using a custom modal for confirmation instead of window.confirm
+    console.log('deleteApplication function called with ID:', id); // Debugging: Check if function is called and ID
     showConfirm('Are you sure you want to delete this application?', async () => {
+        console.log('Confirmation received for deleting application ID:', id); // Debugging: Check if confirmed
+        console.log('Applications array BEFORE deletion attempt:', [...applications]); // Debugging: Array before filter
+        console.log(`Attempting to send DELETE request to: /api/applications/${id}`); // NEW LOG: Confirming fetch is about to happen
         try {
             const response = await fetch(`/api/applications/${id}`, {
                 method: 'DELETE'
             });
 
+            console.log('Delete API response status:', response.status); // Debugging: Check response status
+            // Clone the response before reading its body, as body can only be read once
+            const responseBody = await response.clone().json();
+            console.log('Delete API full response:', responseBody); // Debugging: Log full response
+
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                // Attempt to parse error response from backend
+                let errorMessage = `HTTP error! status: ${response.status}`;
+                if (responseBody && responseBody.detail) {
+                    errorMessage = responseBody.detail;
+                } else {
+                    errorMessage = await response.clone().text() || errorMessage; // Fallback to text if no JSON detail
+                }
+                throw new Error(errorMessage);
             }
 
-            applications = applications.filter(app => app.id !== id);
+            // If response is OK, filter the application from the local array
+            applications = applications.filter(app => String(app.id) !== String(id)); // Ensure string comparison for IDs
+            console.log('Applications array AFTER deletion attempt (filtered):', [...applications]); // Debugging: Array after filter
             renderApplications();
             showAlert('Application deleted successfully!', 'success');
+            console.log('Application deleted successfully from frontend and re-rendered.'); // Debugging: Success log
         } catch (error) {
-            console.error('Error deleting application:', error);
-            showAlert('Failed to delete application. Please try again.', 'error');
+            console.error('Error deleting application:', error); // Debugging: Log full error
+            showAlert('Failed to delete application: ' + error.message, 'error');
         }
     });
 }
@@ -974,8 +1026,8 @@ async function fillProfileFromResumeAI() {
         fillProfileResult.style.display = 'block';
         showAlert('Error filling profile from resume: ' + error.message, 'error');
     } finally {
-        fillProfileLoading.style.display = 'none';
         document.getElementById('resume-pdf-input').value = '';
+        fillProfileLoading.style.display = 'none';
     }
 }
 
@@ -1250,26 +1302,6 @@ function hideInterviewDetailModal() {
     document.getElementById('interview-detail-modal').classList.remove('active');
 }
 
-async function deleteInterview(id) {
-    showConfirm('Are you sure you want to delete this interview?', async () => {
-        try {
-            const response = await fetch(`/api/interviews/${id}`, {
-                method: 'DELETE'
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            showAlert('Interview deleted successfully!', 'success');
-            loadInterviews(); // Reload interviews to update calendar and list
-        } catch (error) {
-            console.error('Error deleting interview:', error);
-            showAlert('Failed to delete interview. Please try again.', 'error');
-        }
-    });
-}
-
 // --- Monthly Interview List Function ---
 function renderMonthlyInterviewList() {
     const monthlyListDiv = document.getElementById('monthly-interview-list');
@@ -1318,6 +1350,307 @@ function renderMonthlyInterviewList() {
 }
 
 
+// --- Dashboard Functions ---
+
+async function loadAllApplicationsForDashboard() {
+    try {
+        const response = await fetch('/api/applications');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        allApplications = await response.json();
+        console.log('All applications loaded for dashboard:', allApplications); // Debugging log
+    }
+    catch (error) {
+        console.error('Error loading all applications for dashboard:', error);
+        showAlert('Failed to load all applications for dashboard. Please try again.', 'error');
+    }
+}
+
+async function loadDashboardData() {
+    await loadAllApplicationsForDashboard(); // Ensure all applications are loaded
+    // Note: loadInterviews() is called by the tab click, and it filters by currentCalendarDate.
+    // For the dashboard, we need interviews for the currentDashboardDate.
+    // So, we'll refetch interviews specifically for the dashboard's selected month.
+    try {
+        const year = currentDashboardDate.getFullYear();
+        const month = currentDashboardDate.getMonth() + 1; // Months are 0-indexed in JS, 1-indexed in API
+
+        console.log('Dashboard - Fetching interviews for year:', year, 'month:', month); // Debugging log
+        const response = await fetch(`/api/interviews?year=${year}&month=${month}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const dashboardInterviews = await response.json();
+        console.log('Dashboard - Loaded interviews for selected month:', dashboardInterviews); // Debugging log
+
+        const selectedYear = currentDashboardDate.getFullYear();
+        const selectedMonth = currentDashboardDate.getMonth(); // 0-indexed
+
+        console.log('Dashboard - currentDashboardDate:', currentDashboardDate); // Debugging log
+        console.log('Dashboard - selectedYear:', selectedYear, 'selectedMonth:', selectedMonth); // Debugging log
+
+        // Filter applications for the selected month
+        const monthlyApplications = allApplications.filter(app => {
+            const appDate = new Date(app.application_date);
+            const isValid = isValidDate(appDate) &&
+                            appDate.getFullYear() === selectedYear &&
+                            appDate.getMonth() === selectedMonth;
+            // console.log(`App: ${app.job_title}, Date: ${app.application_date}, IsValid: ${isValid}`); // Detailed app filtering debug
+            return isValid;
+        });
+        console.log('Dashboard - monthlyApplications (filtered):', monthlyApplications); // Debugging log
+
+        renderApplicationsStatusChart(monthlyApplications);
+        renderInterviewsCountChart(dashboardInterviews); // Use dashboardInterviews
+        renderApplicationTrendChart(monthlyApplications, selectedYear, selectedMonth);
+        renderInterviewTypeChart(dashboardInterviews); // Use dashboardInterviews
+    } catch (error) {
+        console.error('Error loading dashboard data:', error);
+        showAlert('Failed to load dashboard data. Please try again.', 'error');
+    }
+}
+
+function renderApplicationsStatusChart(data) {
+    const ctx = document.getElementById('applicationsStatusChart').getContext('2d');
+
+    const statusCounts = {
+        "Applied": 0,
+        "Interview": 0,
+        "Rejection": 0,
+        "Offer": 0
+    };
+
+    data.forEach(app => {
+        if (statusCounts.hasOwnProperty(app.status)) {
+            statusCounts[app.status]++;
+        }
+    });
+
+    const chartData = {
+        labels: Object.keys(statusCounts),
+        datasets: [{
+            data: Object.values(statusCounts),
+            backgroundColor: [
+                '#4299e1', // Applied (Blue)
+                '#f6ad55', // Interview (Orange)
+                '#ef4444', // Rejection (Red)
+                '#48bb78'  // Offer (Green)
+            ],
+            hoverOffset: 4
+        }]
+    };
+    console.log('Chart Data for Applications Status Chart:', chartData); // Debugging log
+
+    if (applicationsStatusChartInstance) {
+        applicationsStatusChartInstance.destroy();
+    }
+    applicationsStatusChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: false,
+                    text: 'Applications by Status'
+                }
+            }
+        }
+    });
+}
+
+function renderInterviewsCountChart(data) {
+    const ctx = document.getElementById('interviewsCountChart').getContext('2d');
+
+    const daysInMonth = new Date(currentDashboardDate.getFullYear(), currentDashboardDate.getMonth() + 1, 0).getDate();
+    const labels = Array.from({ length: daysInMonth }, (_, i) => i + 1); // Days 1 to 31
+
+    const interviewCounts = new Array(daysInMonth).fill(0);
+
+    data.forEach(interview => {
+        const interviewDay = new Date(interview.start_datetime).getDate();
+        if (isValidDate(new Date(interview.start_datetime)) && interviewDay >= 1 && interviewDay <= daysInMonth) {
+            interviewCounts[interviewDay - 1]++;
+        }
+    });
+
+    const chartData = {
+        labels: labels,
+        datasets: [{
+            label: 'Number of Interviews',
+            data: interviewCounts,
+            backgroundColor: '#667eea',
+            borderColor: '#5a67d8',
+            borderWidth: 1,
+            borderRadius: 5,
+        }]
+    };
+    console.log('Chart Data for Interviews Count Chart:', chartData); // Debugging log
+
+    if (interviewsCountChartInstance) {
+        interviewsCountChartInstance.destroy();
+    }
+    interviewsCountChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false,
+                },
+                title: {
+                    display: false,
+                    text: 'Interviews Scheduled'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Count'
+                    },
+                    ticks: {
+                        stepSize: 1
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Day of Month'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderApplicationTrendChart(data, year, month) {
+    const ctx = document.getElementById('applicationTrendChart').getContext('2d');
+
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const labels = Array.from({ length: daysInMonth }, (_, i) => i + 1); // Days 1 to 31
+
+    const dailyApplications = new Array(daysInMonth).fill(0);
+
+    data.forEach(app => {
+        const appDate = new Date(app.application_date);
+        const appDay = appDate.getDate();
+        if (isValidDate(appDate) && appDay >= 1 && appDay <= daysInMonth) {
+            dailyApplications[appDay - 1]++;
+        }
+    });
+
+    const chartData = {
+        labels: labels,
+        datasets: [{
+            label: 'Applications Submitted',
+            data: dailyApplications,
+            fill: false,
+            borderColor: '#48bb78', // Green
+            tension: 0.1
+        }]
+    };
+    console.log('Chart Data for Application Trend Chart:', chartData); // Debugging log
+
+    if (applicationTrendChartInstance) {
+        applicationTrendChartInstance.destroy();
+    }
+    applicationTrendChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false,
+                },
+                title: {
+                    display: false,
+                    text: 'Application Trends'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Count'
+                    },
+                    ticks: {
+                        stepSize: 1
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Day of Month'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderInterviewTypeChart(data) {
+    const ctx = document.getElementById('interviewTypeChart').getContext('2d');
+
+    const typeCounts = {};
+    data.forEach(interview => {
+        const type = interview.interview_type || 'Unspecified';
+        typeCounts[type] = (typeCounts[type] || 0) + 1;
+    });
+
+    const backgroundColors = [
+        '#667eea', // Purple
+        '#4299e1', // Blue
+        '#48bb78', // Green
+        '#f6ad55', // Orange
+        '#ef4444', // Red
+        '#a0aec0'  // Gray
+    ];
+
+    const chartData = {
+        labels: Object.keys(typeCounts),
+        datasets: [{
+            data: Object.values(typeCounts),
+            backgroundColor: backgroundColors.slice(0, Object.keys(typeCounts).length),
+            hoverOffset: 4
+        }]
+    };
+    console.log('Chart Data for Interview Type Chart:', chartData); // Debugging log
+
+    if (interviewTypeChartInstance) {
+        interviewTypeChartInstance.destroy();
+    }
+    interviewTypeChartInstance = new Chart(ctx, {
+        type: 'pie', // Using pie chart for breakdown
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: false,
+                    text: 'Interview Type Breakdown'
+                }
+            }
+        }
+    });
+}
+
+
 // --- Utility Functions ---
 
 /**
@@ -1344,26 +1677,66 @@ function showAlert(message, type = 'info') {
 
 // Custom confirmation modal (replaces window.confirm)
 function showConfirm(message, onConfirm) {
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.innerHTML = `
-        <div class="modal-content">
-            <p>${message}</p>
-            <div class="modal-actions">
-                <button id="confirm-yes" class="btn btn-danger">Yes</button>
-                <button id="confirm-no" class="btn btn-secondary">No</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
+    console.log('showConfirm function called with message:', message);
+    globalConfirmMessage.textContent = message;
+    globalConfirmModal.classList.add('active');
 
-    document.getElementById('confirm-yes').onclick = () => {
+    // Clear previous event listeners to prevent multiple firings
+    globalConfirmYesBtn.onclick = null;
+    globalConfirmNoBtn.onclick = null;
+
+    globalConfirmYesBtn.onclick = () => {
+        console.log('Confirmation "Yes" button clicked!');
         onConfirm();
-        modal.remove();
+        hideConfirm();
     };
-    document.getElementById('confirm-no').onclick = () => {
-        modal.remove();
+    globalConfirmNoBtn.onclick = () => {
+        console.log('Confirmation "No" button clicked!');
+        hideConfirm();
     };
+}
+
+function hideConfirm() {
+    globalConfirmModal.classList.remove('active');
+}
+
+// --- Interview Delete Function ---
+async function deleteInterview(id) {
+    console.log('deleteInterview function called with ID:', id); // Debugging: Check if function is called and ID
+    showConfirm('Are you sure you want to delete this interview?', async () => {
+        console.log('Confirmation received for deleting interview ID:', id); // Debugging: Check if confirmed
+        console.log('Interviews array BEFORE deletion attempt:', [...interviews]); // Debugging: Array before filter
+        console.log(`Attempting to send DELETE request to: /api/interviews/${id}`); // NEW LOG: Confirming fetch is about to happen
+        try {
+            const response = await fetch(`/api/interviews/${id}`, {
+                method: 'DELETE'
+            });
+
+            console.log('Delete Interview API response status:', response.status); // Debugging: Check response status
+            // Note: FastAPI delete endpoint returns 204 No Content on success, so no JSON body expected.
+            // If it returns a body, you might need to adjust this.
+            if (!response.ok) {
+                let errorMessage = `HTTP error! status: ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.detail || errorMessage;
+                } catch (e) {
+                    errorMessage = await response.text() || errorMessage;
+                }
+                throw new Error(errorMessage);
+            }
+
+            // If response is OK, filter the interview from the local array
+            interviews = interviews.filter(interview => String(interview.id) !== String(id)); // Ensure string comparison for IDs
+            console.log('Interviews array AFTER deletion attempt (filtered):', [...interviews]); // Debugging: Array after filter
+            showAlert('Interview deleted successfully!', 'success');
+            console.log('Interview deleted successfully from frontend.'); // Debugging: Success log
+            loadInterviews(); // Reload interviews to update calendar and list
+        } catch (error) {
+            console.error('Error deleting interview:', error); // Debugging: Log full error
+            showAlert('Failed to delete interview: ' + error.message, 'error');
+        }
+    });
 }
 
 
@@ -1388,3 +1761,4 @@ window.closeApplicationDetailModal = closeApplicationDetailModal; // Expose clos
 window.viewInterviewDetails = viewInterviewDetails; // Expose for dynamically created calendar events
 window.hideInterviewFormModal = hideInterviewFormModal;
 window.hideInterviewDetailModal = hideInterviewDetailModal;
+window.deleteInterview = deleteInterview; // <--- ADDED THIS LINE

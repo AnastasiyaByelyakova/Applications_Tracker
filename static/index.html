@@ -3,90 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Application Tracker</title>
+    <title>Job Application Monitor</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>📄 Job Application Tracker</h1>
-            <p>Manage your job applications with AI-powered insights</p>
-        </div>
+        <h1>Job Application Tracker</h1>
 
-        <div class="nav-tabs">
-            <button class="nav-tab active" data-tab="applications">📋 Applications</button>
-            <button class="nav-tab" data-tab="profile">👤 Profile</button>
-            <button class="nav-tab" data-tab="ai-tools">🤖 AI Tools</button>
-            <button class="nav-tab" data-tab="calendar">📅 Calendar</button>
-        </div>
+        <nav class="nav-tabs">
+            <div class="nav-tab active" data-tab="applications">Applications</div>
+            <div class="nav-tab" data-tab="profile">Profile</div>
+            <div class="nav-tab" data-tab="ai-tools">AI Tools</div>
+            <div class="nav-tab" data-tab="calendar">Calendar</div>
+            <div class="nav-tab" data-tab="dashboard">Dashboard</div>
+        </nav>
 
         <!-- Applications Tab -->
         <div id="applications" class="tab-content active">
-            <div class="form-group">
-                <button class="btn btn-primary" id="add-app-btn">+ Add New Application</button>
-            </div>
+            <h2>Your Applications</h2>
+            <button id="add-app-btn" class="btn btn-primary mb-4">Add New Application</button>
 
-            <div id="add-application-form" style="display: none;">
-                <h3>Add New Job Application</h3>
+            <div id="add-application-form" class="form-section" style="display: none;">
+                <h3>Add/Edit Application</h3>
                 <form id="application-form">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Job Title</label>
-                            <input type="text" id="job-title" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Company</label>
-                            <input type="text" id="company" required>
-                        </div>
+                    <div class="form-group">
+                        <label for="job-title">Job Title</</label>
+                        <input type="text" id="job-title" required>
                     </div>
                     <div class="form-group">
-                        <label>Description</label>
-                        <textarea id="description" rows="4"></textarea>
+                        <label for="company">Company</label>
+                        <input type="text" id="company" required>
                     </div>
                     <div class="form-group">
-                        <label>Link (to job posting)</label>
+                        <label for="link">Application Link</label>
                         <input type="url" id="link">
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Application Date</label>
-                            <input type="date" id="application-date" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Status</label>
-                            <select id="status" required>
-                                <option value="Applied">Applied</option>
-                                <option value="Interview">Interview</option>
-                                <option value="Rejection">Rejection</option>
-                                <option value="Offer">Offer</option>
-                            </select>
-                        </div>
+                    <div class="form-group">
+                        <label for="application-date">Application Date</label>
+                        <input type="date" id="application-date">
+                    </div>
+                    <div class="form-group">
+                        <label for="status">Status</label>
+                        <select id="status">
+                            <option value="Applied">Applied</option>
+                            <option value="Interview">Interview</option>
+                            <option value="Rejection">Rejection</option>
+                            <option value="Offer">Offer</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="description">Job Description</label>
+                        <textarea id="description" rows="5"></textarea>
                     </div>
                     <div class="form-group">
                         <label for="cv-file">Upload CV (for this application)</label>
                         <input type="file" id="cv-file" accept=".pdf,.doc,.docx">
                     </div>
                     <div class="form-group">
-                        <label>Cover Letter</label>
-                        <textarea id="cover-letter" rows="6"></textarea>
+                        <label for="cover-letter">Cover Letter Notes</label>
+                        <textarea id="cover-letter" rows="3"></textarea>
                     </div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary">Save Application</button>
-                        <button type="button" class="btn btn-secondary" id="cancel-app-btn">Cancel</button>
-                    </div>
+                    <button type="submit" class="btn btn-success">Save Application</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-app-btn">Cancel</button>
                 </form>
             </div>
 
             <div class="filter-sort-controls">
-                <input type="text" id="filter-applications" placeholder="Filter applications...">
-                <div class="sort-controls">
-                    <span>Sort by:</span>
-                    <button class="btn btn-sm" onclick="sortTableApplications('job_title')">Title</button>
-                    <button class="btn btn-sm" onclick="sortTableApplications('company')">Company</button>
-                    <button class="btn btn-sm" onclick="sortTableApplications('application_date')">Date</button>
+                <div class="form-group">
+                    <label for="filter-applications">Filter Applications</label>
+                    <input type="text" id="filter-applications" placeholder="Search by title, company, status...">
                 </div>
-                <div class="view-controls">
-                    <span>View:</span>
+                <div class="form-group">
+                    <label for="view-toggle">View As</label>
                     <select id="view-toggle">
                         <option value="cards">Cards</option>
                         <option value="table">Table</option>
@@ -94,17 +84,17 @@
                 </div>
             </div>
 
-            <div id="application-list-cards" class="application-grid">
+            <div id="application-list-cards" class="application-list-cards">
                 <!-- Application cards will be rendered here -->
             </div>
 
-            <div id="application-list-table" class="application-table" style="display: none;">
-                <table>
+            <div id="application-list-table" style="display: none;">
+                <table class="application-list-table">
                     <thead>
                         <tr>
-                            <th>Job Title <button class="sort-icon" onclick="sortTableApplications('job_title')">↕</button></th>
-                            <th>Company <button class="sort-icon" onclick="sortTableApplications('company')">↕</button></th>
-                            <th>Date Applied <button class="sort-icon" onclick="sortTableApplications('application_date')">↕</button></th>
+                            <th onclick="sortTableApplications('job_title')">Job Title</th>
+                            <th onclick="sortTableApplications('company')">Company</th>
+                            <th onclick="sortTableApplications('application_date')">Application Date</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -116,114 +106,89 @@
             </div>
         </div>
 
-        <!-- Application Detail Modal -->
-        <div id="application-detail-modal" class="modal">
-            <div class="modal-content">
-                <span class="close-button" onclick="closeApplicationDetailModal()">&times;</span>
-                <h2>Application Details</h2>
-                <div class="detail-item"><strong>Job Title:</strong> <span id="modal-job-title"></span></div>
-                <div class="detail-item"><strong>Company:</strong> <span id="modal-company"></span></div>
-                <div class="detail-item"><strong>Status:</strong> <span id="modal-status" class="status-badge"></span></div>
-                <div class="detail-item"><strong>Applied On:</strong> <span id="modal-application-date"></span></div>
-                <div class="detail-item"><strong>Description:</strong> <p id="modal-description"></p></div>
-                <div class="detail-item"><strong>Link:</strong> <a id="modal-link" href="#" target="_blank">View Job Posting</a></div>
-                <div class="detail-item"><strong>CV:</strong> <span id="modal-cv-file-name"></span> <a id="modal-cv-file-link" href="#" target="_blank">Download CV</a></div>
-                <div class="detail-item"><strong>Cover Letter:</strong> <p id="modal-cover-letter"></p></div>
-            </div>
-        </div>
-
-
         <!-- Profile Tab -->
         <div id="profile" class="tab-content">
-            <h3>Your Professional Profile</h3>
-            <form id="profile-form">
-                <div class="form-row">
+            <h2>Your Profile</h2>
+            <form id="profile-form" class="form-section">
+                <h3>Personal Information</h3>
+                <div class="flex-group">
                     <div class="form-group">
-                        <label>Full Name</label>
+                        <label for="profile-full-name">Full Name</label>
                         <input type="text" id="profile-full-name">
                     </div>
                     <div class="form-group">
-                        <label>Email</label>
+                        <label for="profile-email">Email</label>
                         <input type="email" id="profile-email">
                     </div>
-                </div>
-                <div class="form-row">
                     <div class="form-group">
-                        <label>Phone</label>
+                        <label for="profile-phone">Phone</label>
                         <input type="tel" id="profile-phone">
                     </div>
                     <div class="form-group">
-                        <label>Location</label>
+                        <label for="profile-location">Location</label>
                         <input type="text" id="profile-location">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Summary/About Me</label>
-                    <textarea id="profile-summary" rows="5"></textarea>
+                    <label for="profile-summary">Summary/Headline</label>
+                    <textarea id="profile-summary" rows="3"></textarea>
                 </div>
 
-                <h4>Education
+                <h3>Education
                     <button type="button" class="btn btn-secondary btn-sm" id="add-education-btn">Add Education</button>
-                    <button type="button" class="btn btn-sm" onclick="sortTableEducation('graduation_year')">Sort by Year ↕</button>
-                </h4>
+                </h3>
                 <div id="education-list">
-                    <!-- Education items will be rendered here -->
+                    <!-- Education entries will be rendered here -->
                 </div>
 
-                <h4>Experience
+                <h3>Experience
                     <button type="button" class="btn btn-secondary btn-sm" id="add-experience-btn">Add Experience</button>
-                    <button type="button" class="btn btn-sm" onclick="sortTableExperience('start_date')">Sort by Date ↕</button>
-                </h4>
+                </h3>
                 <div id="experience-list">
-                    <!-- Experience items will be rendered here -->
+                    <!-- Experience entries will be rendered here -->
                 </div>
 
-                <h4>Skills
+                <h3>Skills
                     <button type="button" class="btn btn-secondary btn-sm" id="add-skill-btn">Add Skill</button>
-                </h4>
-                <div id="skills-list" class="dynamic-item-grid">
-                    <!-- Skills will be rendered here -->
+                </h3>
+                <div id="skills-list">
+                    <!-- Skills entries will be rendered here -->
                 </div>
 
-                <h4>Languages
+                <h3>Languages
                     <button type="button" class="btn btn-secondary btn-sm" id="add-language-btn">Add Language</button>
-                </h4>
-                <div id="languages-list" class="dynamic-item-grid">
-                    <!-- Languages will be rendered here -->
+                </h3>
+                <div id="languages-list">
+                    <!-- Languages entries will be rendered here -->
                 </div>
 
-                <h4>Certifications
+                <h3>Certifications
                     <button type="button" class="btn btn-secondary btn-sm" id="add-certification-btn">Add Certification</button>
-                </h4>
-                <div id="certifications-list" class="dynamic-item-grid">
-                    <!-- Certifications will be rendered here -->
+                </h3>
+                <div id="certifications-list">
+                    <!-- Certifications entries will be rendered here -->
                 </div>
 
-                <h4>Links</h4>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>LinkedIn URL</label>
-                        <input type="url" id="profile-linkedin">
-                    </div>
-                    <div class="form-group">
-                        <label>GitHub URL</label>
-                        <input type="url" id="profile-github">
-                    </div>
+                <h3>Links & Files</h3>
+                <div class="form-group">
+                    <label for="profile-linkedin">LinkedIn Profile</label>
+                    <input type="url" id="profile-linkedin">
                 </div>
                 <div class="form-group">
-                    <label>Portfolio URL</label>
+                    <label for="profile-github">GitHub Profile</label>
+                    <input type="url" id="profile-github">
+                </div>
+                <div class="form-group">
+                    <label for="profile-portfolio">Portfolio Website</label>
                     <input type="url" id="profile-portfolio">
                 </div>
-
                 <div class="form-group">
-                    <label for="profile-cv-file">Upload Master CV (for AI tools)</label>
+                    <label for="profile-cv-file">Upload Profile CV (Master CV)</label>
                     <input type="file" id="profile-cv-file" accept=".pdf,.doc,.docx">
                     <span id="profile-cv-filename">No file uploaded</span>
                 </div>
 
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">Save Profile</button>
-                </div>
+                <button type="submit" class="btn btn-primary">Save Profile</button>
             </form>
         </div>
 
@@ -232,196 +197,231 @@
             <h2>AI Powered Tools</h2>
 
             <div class="ai-tool-section">
-                <h3>📈 Job Chance Estimator</h3>
-                <p>Estimate your chances of getting a job based on a job description and your profile.</p>
-
+                <h3>Estimate Job Chance</h3>
+                <p>Get an estimation of your chances for a job based on your profile and the job description.</p>
                 <div class="form-group">
-                    <label>Job Description</label>
-                    <textarea id="job-desc-chance" rows="6" placeholder="Paste the job description here..."></textarea>
+                    <label for="job-desc-chance">Job Description</label>
+                    <textarea id="job-desc-chance" rows="8" placeholder="Paste the full job description here..."></textarea>
                 </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>AI Provider</label>
-                        <select id="ai-provider-chance">
-                            <option value="openai">OpenAI GPT</option>
-                            <option value="gemini">Google Gemini</option>
-                            <option value="claude">Anthropic Claude</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>API Key</label>
-                        <input type="password" id="api-key-chance" placeholder="Enter your API key">
-                    </div>
+                <div class="form-group">
+                    <label for="ai-provider-chance">AI Provider</label>
+                    <select id="ai-provider-chance">
+                        <option value="gemini">Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                    </select>
                 </div>
-
+                <div class="form-group">
+                    <label for="api-key-chance">API Key</label>
+                    <input type="text" id="api-key-chance" placeholder="Enter your AI provider API key">
+                </div>
                 <button class="btn btn-primary" id="estimate-chance-btn">Estimate Chance</button>
-
-                <div id="chance-loading" class="loading">
-                    <div class="spinner"></div>
-                    <p>Estimating job chance...</p>
+                <div id="chance-loading" class="loading-indicator" style="display: none;">
+                    <div class="spinner"></div> Loading...
                 </div>
-
-                <div id="chance-result" class="ai-result" style="display: none;"></div>
+                <div id="chance-result" class="ai-result-box" style="display: none;"></div>
             </div>
 
             <div class="ai-tool-section">
-                <h3>🤖 Fill Profile from Resume</h3>
-                <p>Upload your resume (PDF) and let AI extract information to pre-fill your profile.</p>
+                <h3>Tune CV for Job Description</h3>
+                <p>Receive suggestions on how to tailor your CV to better match a specific job description.</p>
+                <div class="form-group">
+                    <label for="job-desc-cv">Job Description</label>
+                    <textarea id="job-desc-cv" rows="8" placeholder="Paste the full job description here..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="ai-provider-cv">AI Provider</label>
+                    <select id="ai-provider-cv">
+                        <option value="gemini">Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="api-key-cv">API Key</label>
+                    <input type="text" id="api-key-cv" placeholder="Enter your AI provider API key">
+                </div>
+                <button class="btn btn-primary" id="tune-cv-btn">Tune CV</button>
+                <div id="cv-loading" class="loading-indicator" style="display: none;">
+                    <div class="spinner"></div> Loading...
+                </div>
+                <div id="cv-result" class="ai-result-box" style="display: none;"></div>
+            </div>
 
+            <div class="ai-tool-section">
+                <h3>Fill Profile from Resume (AI)</h3>
+                <p>Upload your resume (PDF) and let AI extract information to populate your profile.</p>
                 <div class="form-group">
                     <label for="resume-pdf-input">Upload Resume (PDF)</label>
                     <input type="file" id="resume-pdf-input" accept=".pdf">
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>AI Provider</label>
-                        <select id="ai-provider-fill-profile">
-                            <option value="openai">OpenAI GPT</option>
-                            <option value="gemini">Google Gemini</option>
-                            <option value="claude">Anthropic Claude</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>API Key</label>
-                        <input type="password" id="api-key-fill-profile" placeholder="Enter your API key">
-                    </div>
+                <div class="form-group">
+                    <label for="ai-provider-fill-profile">AI Provider</label>
+                    <select id="ai-provider-fill-profile">
+                        <option value="gemini">Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="api-key-fill-profile">API Key</label>
+                    <input type="text" id="api-key-fill-profile" placeholder="Enter your AI provider API key">
                 </div>
                 <button class="btn btn-primary" id="fill-profile-btn">Fill Profile</button>
-
-                <div id="fill-profile-loading" class="loading">
-                    <div class="spinner"></div>
-                    <p>Extracting data from your resume...</p>
+                <div id="fill-profile-loading" class="loading-indicator" style="display: none;">
+                    <div class="spinner"></div> Loading...
                 </div>
-
-                <div id="fill-profile-result" class="ai-result" style="display: none;"></div>
+                <div id="fill-profile-result" class="ai-result-box" style="display: none;"></div>
             </div>
-
-            <div class="ai-tool-section">
-                <h3>📝 CV Tuner</h3>
-                <p>Get a tailored CV optimized for a specific job</p>
-
-                <div class="form-group">
-                    <label>Job Description</label>
-                    <textarea id="job-desc-cv" rows="6" placeholder="Paste the job description here..."></textarea>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>AI Provider</label>
-                        <select id="ai-provider-cv">
-                            <option value="openai">OpenAI GPT</option>
-                            <option value="gemini">Google Gemini</option>
-                            <option value="claude">Anthropic Claude</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>API Key</label>
-                        <input type="password" id="api-key-cv" placeholder="Enter your API key">
-                    </div>
-                </div>
-
-                <button class="btn btn-primary" id="tune-cv-btn">Generate Tuned CV</button>
-
-                <div id="cv-loading" class="loading">
-                    <div class="spinner"></div>
-                    <p>Generating your tuned CV...</p>
-                </div>
-
-                <div id="cv-result" class="ai-result" style="display: none;"></div>
-            </div>
-
         </div>
 
         <!-- Calendar Tab -->
         <div id="calendar" class="tab-content">
             <h2>Interview Calendar</h2>
             <div class="calendar-header">
-                <button class="btn btn-secondary" id="prev-month-btn">&laquo; Prev</button>
+                <button class="btn btn-secondary" id="prev-month-btn">Previous</button>
                 <h3 id="current-month-year"></h3>
-                <button class="btn btn-secondary" id="next-month-btn">Next &raquo;</button>
+                <button class="btn btn-secondary" id="next-month-btn">Next</button>
             </div>
-            <div class="calendar-grid-container">
-                <div class="calendar-weekdays">
-                    <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
-                </div>
-                <div id="calendar-days-grid" class="calendar-days-grid">
-                    <!-- Calendar days and interviews will be rendered here -->
-                </div>
+            <div class="calendar-grid" id="calendar-days-grid"> <!-- Added id="calendar-days-grid" here -->
+                <div class="calendar-day-header">Sun</div>
+                <div class="calendar-day-header">Mon</div>
+                <div class="calendar-day-header">Tue</div>
+                <div class="calendar-day-header">Wed</div>
+                <div class="calendar-day-header">Thu</div>
+                <div class="calendar-day-header">Fri</div>
+                <div class="calendar-day-header">Sat</div>
+                <!-- Days will be dynamically generated here -->
             </div>
-            <div class="form-actions" style="margin-top: 20px;">
-                <button class="btn btn-primary" id="add-interview-btn">Add New Interview</button>
-            </div>
+            <button class="btn btn-primary mt-4" id="add-interview-btn">Schedule New Interview</button>
 
-            <h3 style="margin-top: 30px;">Interviews This Month</h3>
-            <div id="monthly-interview-list" class="monthly-interview-list">
-                <!-- Monthly interviews will be listed here -->
+            <h3 class="mt-4">Interviews This Month</h3>
+            <div id="monthly-interview-list">
+                <!-- Monthly interview list will be rendered here -->
             </div>
         </div>
 
-        <!-- Add/Edit Interview Modal -->
-        <div id="interview-form-modal" class="modal">
-            <div class="modal-content">
-                <span class="close-button" onclick="hideInterviewFormModal()">&times;</span>
-                <h2 id="interview-modal-title">Schedule New Interview</h2>
-                <form id="interview-form">
-                    <input type="hidden" id="interview-id">
-                    <!-- Removed Linked Job Application -->
-                    <div class="form-group">
-                        <label for="interview-title">Interview Title</label>
-                        <input type="text" id="interview-title" placeholder="e.g., Technical Interview - Google" required>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="interview-date">Date</label>
-                            <input type="date" id="interview-date" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="interview-start-time">Start Time</label>
-                            <input type="time" id="interview-start-time" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="interview-end-time">End Time</label>
-                            <input type="time" id="interview-end-time" required>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="interview-location">Location</label>
-                        <input type="text" id="interview-location" placeholder="e.g., Google Meet, On-site, Zoom Link">
-                    </div>
-                    <div class="form-group">
-                        <label for="interview-type">Type</label>
-                        <input type="text" id="interview-type" placeholder="e.g., Technical, HR, Panel">
-                    </div>
-                    <div class="form-group">
-                        <label for="interview-notes">Notes</label>
-                        <textarea id="interview-notes" rows="4"></textarea>
-                    </div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary">Save Interview</button>
-                        <button type="button" class="btn btn-secondary" onclick="hideInterviewFormModal()">Cancel</button>
-                    </div>
-                </form>
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content">
+            <h2>Dashboard Overview</h2>
+            <div class="form-group" style="max-width: 200px;">
+                <label for="dashboard-month-select">Select Month</label>
+                <input type="month" id="dashboard-month-select">
+            </div>
+
+            <div class="dashboard-charts">
+                <div class="chart-container">
+                    <h4>Applications by Status</h4>
+                    <canvas id="applicationsStatusChart" class="chart-canvas"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h4>Interviews Scheduled</h4>
+                    <canvas id="interviewsCountChart" class="chart-canvas"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h4>Application Trends</h4>
+                    <canvas id="applicationTrendChart" class="chart-canvas"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h4>Interview Types</h4>
+                    <canvas id="interviewTypeChart" class="chart-canvas"></canvas>
+                </div>
             </div>
         </div>
 
-        <!-- View Interview Details Modal -->
-        <div id="interview-detail-modal" class="modal">
-            <div class="modal-content">
-                <span class="close-button" onclick="hideInterviewDetailModal()">&times;</span>
-                <h2 id="detail-interview-title"></h2>
-                <!-- Removed Job Application and Company fields -->
-                <div class="detail-item"><strong>Time:</strong> <span id="detail-interview-time"></span></div>
-                <div class="detail-item"><strong>Location:</strong> <span id="detail-interview-location"></span></div>
-                <div class="detail-item"><strong>Type:</strong> <span id="detail-interview-type"></span></div>
-                <div class="detail-item"><strong>Notes:</strong> <p id="detail-interview-notes"></p></div>
+    </div>
+
+    <!-- Modals (Hidden by default, shown by JS) -->
+
+    <!-- Application Detail Modal -->
+    <div id="application-detail-modal" class="modal">
+        <div class="modal-content">
+            <h3>Application Details</h3>
+            <p><strong>Job Title:</strong> <span id="modal-job-title"></span></p>
+            <p><strong>Company:</strong> <span id="modal-company"></span></p>
+            <p><strong>Status:</strong> <span id="modal-status" class="status-badge"></span></p>
+            <p><strong>Applied On:</strong> <span id="modal-application-date"></span></p>
+            <p><strong>Description:</strong> <span id="modal-description"></span></p>
+            <p><strong>Link:</strong> <a id="modal-link" href="#" target="_blank">View Job Posting</a></p>
+            <p><strong>CV:</strong> <span id="modal-cv-file-name"></span> <a id="modal-cv-file-link" href="#" target="_blank">Download</a></p>
+            <p><strong>Cover Letter Notes:</strong> <span id="modal-cover-letter"></span></p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeApplicationDetailModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interview Form Modal -->
+    <div id="interview-form-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="interview-modal-title">Schedule New Interview</h3>
+            <form id="interview-form">
+                <input type="hidden" id="interview-id">
+
+                <div class="form-group">
+                    <label for="interview-title">Interview Title</label>
+                    <input type="text" id="interview-title" required>
+                </div>
+                <div class="flex-group">
+                    <div class="form-group">
+                        <label for="interview-date">Date</label>
+                        <input type="date" id="interview-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="interview-start-time">Start Time</label>
+                        <input type="time" id="interview-start-time" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="interview-end-time">End Time</label>
+                        <input type="time" id="interview-end-time" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="interview-location">Location</label>
+                    <input type="text" id="interview-location">
+                </div>
+                <div class="form-group">
+                    <label for="interview-type">Type</label>
+                    <input type="text" id="interview-type" placeholder="e.g., Technical, HR, Panel">
+                </div>
+                <div class="form-group">
+                    <label for="interview-notes">Notes</label>
+                    <textarea id="interview-notes" rows="3"></textarea>
+                </div>
                 <div class="modal-actions">
-                    <button class="btn btn-info" id="edit-interview-btn" onclick="">Edit</button>
-                    <button class="btn btn-danger" id="delete-interview-btn" onclick="">Delete</button>
+                    <button type="submit" class="btn btn-success">Save Interview</button>
+                    <button type="button" class="btn btn-secondary" onclick="hideInterviewFormModal()">Cancel</button>
                 </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Interview Detail View Modal -->
+    <div id="interview-detail-modal" class="modal">
+        <div class="modal-content">
+            <h3>Interview Details</h3>
+            <p><strong>Title:</strong> <span id="detail-interview-title"></span></p>
+            <p><strong>Time:</strong> <span id="detail-interview-time"></span></p>
+            <p><strong>Location:</strong> <span id="detail-interview-location"></span></p>
+            <p><strong>Type:</strong> <span id="detail-interview-type"></span></p>
+            <p><strong>Notes:</strong> <span id="detail-interview-notes"></span></p>
+            <div class="modal-actions">
+                <button class="btn btn-info" id="edit-interview-btn">Edit</button>
+                <button class="btn btn-danger" id="delete-interview-btn">Delete</button>
+                <button class="btn btn-secondary" onclick="hideInterviewDetailModal()">Close</button>
             </div>
         </div>
+    </div>
 
+    <!-- Global Confirmation Modal (for delete actions) -->
+    <div id="global-confirm-modal" class="modal">
+        <div class="modal-content">
+            <p id="global-confirm-message"></p>
+            <div class="modal-actions">
+                <button id="global-confirm-yes" class="btn btn-danger">Yes</button>
+                <button id="global-confirm-no" class="btn btn-secondary">No</button>
+            </div>
+        </div>
     </div>
 
     <script src="/static/js/main.js"></script>

@@ -34,7 +34,7 @@ class Database:
     async def _execute(self, query: str, *args):
         """Helper to execute a database query (insert, update, delete)."""
         async with self.pool.acquire() as conn:
-            await conn.execute(query, *args)
+            return await conn.execute(query, *args)  # Return the command tag
 
     async def _fetch_one(self, query: str, *args) -> Optional[Dict[str, Any]]:
         """Helper to fetch one row from the database and convert 'id' to string."""
@@ -233,9 +233,39 @@ class Database:
 
     async def delete_application(self, app_id: str) -> bool:
         """Deletes a job application."""
-        # asyncpg's execute returns None for successful DELETE, so just return True
-        await self._execute("DELETE FROM applications WHERE id = $1;", int(app_id))
-        return True
+        try:
+            int_app_id = int(app_id)
+        except ValueError:
+            print(f"Database: Invalid app_id format for deletion: {app_id}")
+            return False
+
+        # Execute the delete command and get the command tag
+        command_tag = await self._execute("DELETE FROM applications WHERE id = $1;", int_app_id)
+
+        # Parse the command tag to get the number of deleted rows
+        # A successful delete will return a tag like 'DELETE 1', 'DELETE 0' if no row found
+        deleted_count = 0
+        if command_tag and ' ' in command_tag:
+            try:
+                deleted_count = int(command_tag.split(' ')[1])
+            except ValueError:
+                print(f"Database: Could not parse deleted count from command tag: '{command_tag}'")
+
+        print(f"Database: DELETE command tag: '{command_tag}', Deleted count: {deleted_count}")
+        return deleted_count > 0
+
+    async def get_application(self, app_id: str) -> Optional[JobApplication]:
+        """Retrieves a single job application."""
+        # This method uses ObjectId from Mongita, which is incorrect for PostgreSQL.
+        # It should use integer ID directly. Assuming it's not currently called or will be fixed.
+        # For now, I'll update it to use int(app_id) for consistency with other PostgreSQL methods.
+        try:
+            record = await self._fetch_one("SELECT * FROM applications WHERE id = $1;", int(app_id))
+            if record:
+                return JobApplication(**record)
+        except ValueError:
+            print(f"Database: Invalid app_id format for get_application: {app_id}")
+        return None
 
     # User Profile methods (Keep existing)
     async def get_profile(self) -> Optional[UserProfile]:
@@ -441,3 +471,4 @@ class Database:
         """Deletes an interview."""
         await self._execute("DELETE FROM interviews WHERE id = $1;", int(interview_id))
         return True
+
