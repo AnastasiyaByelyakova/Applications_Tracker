@@ -15,7 +15,23 @@
         <nav class="nav-tabs">
             <div class="nav-tab active" data-tab="applications">Applications</div>
             <div class="nav-tab" data-tab="profile">Profile</div>
-            <div class="nav-tab" data-tab="ai-tools">AI Tools</div>
+
+            <!-- AI Tools Dropdown -->
+            <div class="nav-tab dropdown" id="ai-tools-dropdown">
+                AI Tools <span class="dropdown-arrow">&#9660;</span>
+                <div class="dropdown-content">
+                    <a href="#" data-ai-service="estimate-chance">Estimate Job Chance</a>
+                    <a href="#" data-ai-service="tune-cv">Tune CV for Job</a>
+                    <a href="#" data-ai-service="cover-letter">Cover Letter Writing</a>
+                    <a href="#" data-ai-service="interview-qa">Interview Q&A Practice</a>
+                    <a href="#" data-ai-service="skill-extractor">Skill Extractor</a>
+                    <a href="#" data-ai-service="craft-interview-questions">Craft Interview Questions</a>
+                    <a href="#" data-ai-service="company-research">Company Research</a>
+                    <a href="#" data-ai-service="about-me-answer">Tuned "About Me" Answer</a>
+                    <a href="#" data-ai-service="fill-profile">Fill Profile from Resume</a>
+                </div>
+            </div>
+
             <div class="nav-tab" data-tab="calendar">Calendar</div>
             <div class="nav-tab" data-tab="dashboard">Dashboard</div>
         </nav>
@@ -192,11 +208,15 @@
             </form>
         </div>
 
-        <!-- AI Tools Tab -->
+        <!-- AI Tools Tab (now a container for sub-pages) -->
         <div id="ai-tools" class="tab-content">
             <h2>AI Powered Tools</h2>
+            <p id="ai-tools-intro-message">Select an AI service from the "AI Tools" dropdown above.</p>
 
-            <div class="ai-tool-section">
+            <!-- Individual AI Service Sections -->
+
+            <!-- Estimate Job Chance -->
+            <div id="ai-service-estimate-chance" class="ai-tool-section ai-service-page" style="display: none;">
                 <h3>Estimate Job Chance</h3>
                 <p>Get an estimation of your chances for a job based on your profile and the job description.</p>
                 <div class="form-group">
@@ -222,7 +242,8 @@
                 <div id="chance-result" class="ai-result-box" style="display: none;"></div>
             </div>
 
-            <div class="ai-tool-section">
+            <!-- Tune CV for Job Description -->
+            <div id="ai-service-tune-cv" class="ai-tool-section ai-service-page" style="display: none;">
                 <h3>Tune CV for Job Description</h3>
                 <p>Receive suggestions on how to tailor your CV to better match a specific job description.</p>
                 <div class="form-group">
@@ -248,7 +269,178 @@
                 <div id="cv-result" class="ai-result-box" style="display: none;"></div>
             </div>
 
-            <div class="ai-tool-section">
+            <!-- Cover Letter Writing -->
+            <div id="ai-service-cover-letter" class="ai-tool-section ai-service-page" style="display: none;">
+                <h3>Cover Letter Writing</h3>
+                <p>Generate a draft cover letter tailored to a specific job description using your profile.</p>
+                <div class="form-group">
+                    <label for="job-desc-cover-letter">Job Description</label>
+                    <textarea id="job-desc-cover-letter" rows="8" placeholder="Paste the full job description here..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="ai-provider-cover-letter">AI Provider</label>
+                    <select id="ai-provider-cover-letter">
+                        <option value="gemini">Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="api-key-cover-letter">API Key</label>
+                    <input type="text" id="api-key-cover-letter" placeholder="Enter your AI provider API key">
+                </div>
+                <button class="btn btn-primary" id="generate-cover-letter-btn">Generate Cover Letter</button>
+                <div id="cover-letter-loading" class="loading-indicator" style="display: none;">
+                    <div class="spinner"></div> Generating...
+                </div>
+                <div id="cover-letter-result" class="ai-result-box" style="display: none;"></div>
+            </div>
+
+            <!-- Interview Q&A Practice -->
+            <div id="ai-service-interview-qa" class="ai-tool-section ai-service-page" style="display: none;">
+                <h3>Interview Q&A Practice (Chatbot)</h3>
+                <p>Practice common interview questions and get feedback on your answers.</p>
+                <div class="form-group">
+                    <label for="job-title-qa">Job Title/Role (for question context)</label>
+                    <input type="text" id="job-title-qa" placeholder="e.g., 'Software Engineer', 'Marketing Manager'">
+                </div>
+                 <div class="form-group">
+                    <label for="ai-provider-qa">AI Provider</label>
+                    <select id="ai-provider-qa">
+                        <option value="gemini">Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="api-key-qa">API Key</label>
+                    <input type="text" id="api-key-qa" placeholder="Enter your AI provider API key">
+                </div>
+                <div class="chat-container">
+                    <div id="qa-chat-display" class="chat-display">
+                        <!-- Chat messages will appear here -->
+                        <div class="chat-message bot-message">Hello! I'm your interview practice bot. Tell me a job title, and I'll ask you some questions.</div>
+                    </div>
+                    <div class="chat-input-group">
+                        <input type="text" id="qa-chat-input" placeholder="Type your question or answer here...">
+                        <button class="btn btn-primary btn-sm" id="qa-chat-send-btn">Send</button>
+                    </div>
+                </div>
+                <div id="qa-loading" class="loading-indicator" style="display: none;">
+                    <div class="spinner"></div> Thinking...
+                </div>
+            </div>
+
+            <!-- Job Description Key Skill Extractor -->
+            <div id="ai-service-skill-extractor" class="ai-tool-section ai-service-page" style="display: none;">
+                <h3>Job Description Key Skill Extractor & Analyzer</h3>
+                <p>Extract key skills from a job description and see how they align with your profile.</p>
+                <div class="form-group">
+                    <label for="job-desc-skill-extractor">Job Description</label>
+                    <textarea id="job-desc-skill-extractor" rows="8" placeholder="Paste the full job description here..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="ai-provider-skill-extractor">AI Provider</label>
+                    <select id="ai-provider-skill-extractor">
+                        <option value="gemini">Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="api-key-skill-extractor">API Key</label>
+                    <input type="text" id="api-key-skill-extractor" placeholder="Enter your AI provider API key">
+                </div>
+                <button class="btn btn-primary" id="extract-skills-btn">Extract & Analyze Skills</button>
+                <div id="skill-extractor-loading" class="loading-indicator" style="display: none;">
+                    <div class="spinner"></div> Analyzing...
+                </div>
+                <div id="skill-extractor-result" class="ai-result-box" style="display: none;"></div>
+            </div>
+
+            <!-- Crafting Interview Questions for Candidate -->
+            <div id="ai-service-craft-interview-questions" class="ai-tool-section ai-service-page" style="display: none;">
+                <h3>Craft Interview Questions for a Candidate</h3>
+                <p>Generate insightful interview questions to ask a candidate based on a job description or their resume.</p>
+                <div class="form-group">
+                    <label for="candidate-info-questions">Job Description or Candidate's Resume Summary</label>
+                    <textarea id="candidate-info-questions" rows="8" placeholder="Paste the job description or a summary of the candidate's resume here..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="ai-provider-craft-questions">AI Provider</label>
+                    <select id="ai-provider-craft-questions">
+                        <option value="gemini">Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="api-key-craft-questions">API Key</label>
+                    <input type="text" id="api-key-craft-questions" placeholder="Enter your AI provider API key">
+                </div>
+                <button class="btn btn-primary" id="craft-questions-btn">Generate Questions</button>
+                <div id="craft-questions-loading" class="loading-indicator" style="display: none;">
+                    <div class="spinner"></div> Generating...
+                </div>
+                <div id="craft-questions-result" class="ai-result-box" style="display: none;"></div>
+            </div>
+
+            <!-- Company Website Info Extractor -->
+            <div id="ai-service-company-research" class="ai-tool-section ai-service-page" style="display: none;">
+                <h3>Company Website Research</h3>
+                <p>Extract key information (mission, values, work areas, recent projects, news) from a company's website.</p>
+                <div class="form-group">
+                    <label for="company-url-research">Company Website URL</label>
+                    <input type="url" id="company-url-research" placeholder="e.g., https://www.example.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="ai-provider-company-research">AI Provider</label>
+                    <select id="ai-provider-company-research">
+                        <option value="gemini">Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="api-key-company-research">API Key</label>
+                    <input type="text" id="api-key-company-research" placeholder="Enter your AI provider API key">
+                </div>
+                <button class="btn btn-primary" id="research-company-btn">Research Company</button>
+                <div id="company-research-loading" class="loading-indicator" style="display: none;">
+                    <div class="spinner"></div> Researching...
+                </div>
+                <div id="company-research-result" class="ai-result-box" style="display: none;"></div>
+            </div>
+
+            <!-- Tuned "About Me" Answer -->
+            <div id="ai-service-about-me-answer" class="ai-tool-section ai-service-page" style="display: none;">
+                <h3>Tuned "About Me" Answer</h3>
+                <p>Generate a compelling "Tell me about yourself" answer, tuned to a specific job description using your profile.</p>
+                <div class="form-group">
+                    <label for="job-desc-about-me">Job Description</label>
+                    <textarea id="job-desc-about-me" rows="8" placeholder="Paste the full job description here..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="ai-provider-about-me">AI Provider</label>
+                    <select id="ai-provider-about-me">
+                        <option value="gemini">Gemini</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Claude</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="api-key-about-me">API Key</label>
+                    <input type="text" id="api-key-about-me" placeholder="Enter your AI provider API key">
+                </div>
+                <button class="btn btn-primary" id="generate-about-me-btn">Generate "About Me"</button>
+                <div id="about-me-loading" class="loading-indicator" style="display: none;">
+                    <div class="spinner"></div> Generating...
+                </div>
+                <div id="about-me-result" class="ai-result-box" style="display: none;"></div>
+            </div>
+
+            <!-- Existing Fill Profile from Resume (AI) -->
+            <div id="ai-service-fill-profile" class="ai-tool-section ai-service-page" style="display: none;">
                 <h3>Fill Profile from Resume (AI)</h3>
                 <p>Upload your resume (PDF) and let AI extract information to populate your profile.</p>
                 <div class="form-group">
@@ -273,6 +465,7 @@
                 </div>
                 <div id="fill-profile-result" class="ai-result-box" style="display: none;"></div>
             </div>
+
         </div>
 
         <!-- Calendar Tab -->
@@ -430,6 +623,14 @@
         </div>
     </div>
 
-    <script src="/static/js/main.js"></script>
+    <!-- Script imports for modularized JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> <!-- Added Marked.js -->
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/applications.js"></script>
+    <script src="/static/js/profile.js"></script>
+    <script src="/static/js/calendar.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/ai_services_frontend.js"></script>
+    <script src="/static/js/app.js"></script>
 </body>
 </html>

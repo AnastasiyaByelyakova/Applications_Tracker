@@ -3,8 +3,8 @@ body {
     font-family: 'Inter', sans-serif;
     margin: 0;
     padding: 20px;
-    background-color: #f7fafc; /* Light gray background */
-    color: #2d3748; /* Darker text */
+    background-color: #f7fafc; /* Very light gray, almost white */
+    color: #2d3748; /* Darker text for readability */
     line-height: 1.6;
 }
 
@@ -12,15 +12,15 @@ body {
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    background-color: #ffffff;
+    background-color: #ffffff; /* White container for content */
     padding: 30px;
     border-radius: 15px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08); /* Soft shadow */
 }
 
 /* Header */
 h1 {
-    color: #2c5282; /* Darker blue */
+    color: #4a698c; /* Muted blue for main heading */
     text-align: center;
     margin-bottom: 30px;
     font-size: 2.5em;
@@ -32,7 +32,7 @@ h1 {
     display: flex;
     justify-content: center;
     margin-bottom: 30px;
-    border-bottom: 2px solid #e2e8f0;
+    border-bottom: 2px solid #e0e7eb; /* Light gray border */
 }
 
 .nav-tab {
@@ -40,22 +40,73 @@ h1 {
     cursor: pointer;
     font-size: 1.1em;
     font-weight: 600;
-    color: #718096; /* Gray text */
+    color: #7a8c9e; /* Muted gray text */
     border-bottom: 3px solid transparent;
     transition: all 0.3s ease;
     border-radius: 8px 8px 0 0;
 }
 
 .nav-tab:hover {
-    color: #4a5568; /* Slightly darker gray on hover */
-    background-color: #edf2f7; /* Lighter background on hover */
+    color: #5d7a94; /* Slightly darker gray on hover */
+    background-color: #f0f4f8; /* Very light blue-gray on hover */
 }
 
 .nav-tab.active {
-    color: #3182ce; /* Active blue */
-    border-bottom-color: #3182ce;
-    background-color: #e2f0fb; /* Light blue background for active */
+    color: #6a8ec2; /* Soft blue for active tab */
+    border-bottom-color: #6a8ec2;
+    background-color: #eaf2f7; /* Very light blue background for active */
 }
+
+/* Dropdown specific styles */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #ffffff;
+    min-width: 200px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.1);
+    z-index: 1;
+    border-radius: 8px;
+    margin-top: 5px; /* Space below the "AI Tools" button */
+    left: 50%;
+    transform: translateX(-50%); /* Center the dropdown */
+}
+
+.dropdown-content a {
+    color: #2d3748;
+    padding: 12px 16px;
+    text-decoration: none;
+    display: block;
+    text-align: left;
+    font-weight: 400;
+    transition: background-color 0.2s ease;
+    border-radius: 8px; /* Apply rounded corners to links */
+}
+
+.dropdown-content a:hover {
+    background-color: #eaf2f7; /* Light blue on hover */
+    color: #4a698c;
+}
+
+.dropdown.active .dropdown-content {
+    display: block;
+}
+
+.dropdown-arrow {
+    margin-left: 5px;
+    font-size: 0.8em;
+    vertical-align: middle;
+    transition: transform 0.3s ease;
+}
+
+.dropdown.active .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
 
 /* Tab Content */
 .tab-content {
@@ -69,23 +120,23 @@ h1 {
 
 /* Section Headings */
 h2 {
-    color: #2c5282;
+    color: #4a698c; /* Muted blue */
     margin-top: 30px;
     margin-bottom: 20px;
     font-size: 2em;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e0e7eb; /* Light gray border */
     padding-bottom: 10px;
 }
 
 h3 {
-    color: #4a5568;
+    color: #5d7a94; /* Medium muted blue */
     margin-top: 25px;
     margin-bottom: 15px;
     font-size: 1.5em;
 }
 
 h4 {
-    color: #4a5568;
+    color: #5d7a94; /* Medium muted blue */
     margin-top: 20px;
     margin-bottom: 10px;
     font-size: 1.2em;
@@ -94,11 +145,11 @@ h4 {
 
 /* Form Styling */
 .form-section {
-    background-color: #f0f4f8; /* Very light blue-gray */
+    background-color: #eaf2f7; /* Very light pastel blue */
     padding: 25px;
     border-radius: 12px;
     margin-bottom: 30px;
-    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.05);
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.03); /* Subtle inner shadow */
 }
 
 .form-group {
@@ -109,7 +160,7 @@ h4 {
     display: block;
     margin-bottom: 8px;
     font-weight: 600;
-    color: #4a5568;
+    color: #4a5568; /* Dark gray for labels */
 }
 
 .form-group input[type="text"],
@@ -124,11 +175,11 @@ h4 {
 .form-group select {
     width: calc(100% - 20px); /* Adjust for padding */
     padding: 12px 10px;
-    border: 1px solid #cbd5e0; /* Light border */
+    border: 1px solid #cdd4da; /* Light cool gray border */
     border-radius: 8px;
     font-size: 1em;
-    color: #2d3748;
-    background-color: #ffffff;
+    color: #2d3748; /* Dark text */
+    background-color: #ffffff; /* White input background */
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -142,8 +193,8 @@ h4 {
 .form-group input[type="number"]:focus,
 .form-group textarea:focus,
 .form-group select:focus {
-    border-color: #3182ce; /* Blue on focus */
-    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.2); /* Light blue shadow */
+    border-color: #6a8ec2; /* Soft blue on focus */
+    box-shadow: 0 0 0 3px rgba(106, 142, 194, 0.3); /* Soft blue shadow */
     outline: none;
 }
 
@@ -161,60 +212,60 @@ h4 {
     font-size: 1em;
     font-weight: 600;
     transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Consistent shadow */
 }
 
 .btn-primary {
-    background-color: #3182ce; /* Blue */
-    color: white;
+    background-color: #a7c7e7; /* Soft blue */
+    color: #2d3748; /* Dark text for contrast */
 }
 
 .btn-primary:hover {
-    background-color: #2b6cb0; /* Darker blue */
+    background-color: #8faed9; /* Slightly darker soft blue */
     transform: translateY(-2px);
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
 .btn-secondary {
-    background-color: #a0aec0; /* Gray */
-    color: white;
+    background-color: #cdd4da; /* Light cool gray */
+    color: #2d3748; /* Dark text */
 }
 
 .btn-secondary:hover {
-    background-color: #718096; /* Darker gray */
+    background-color: #b2bec7; /* Darker light cool gray */
     transform: translateY(-2px);
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
 .btn-success {
-    background-color: #48bb78; /* Green */
-    color: white;
+    background-color: #b2e8b2; /* Soft green */
+    color: #2d3748; /* Dark text */
 }
 
 .btn-success:hover {
-    background-color: #38a169; /* Darker green */
+    background-color: #9cdb9c; /* Darker soft green */
     transform: translateY(-2px);
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
 .btn-danger {
-    background-color: #ef4444; /* Red */
-    color: white;
+    background-color: #ffb2b2; /* Soft red */
+    color: #2d3748; /* Dark text */
 }
 
 .btn-danger:hover {
-    background-color: #dc2626; /* Darker red */
+    background-color: #ff9999; /* Darker soft red */
     transform: translateY(-2px);
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
 .btn-info {
-    background-color: #4299e1; /* Light blue */
-    color: white;
+    background-color: #b2e0e0; /* Soft teal */
+    color: #2d3748; /* Dark text */
 }
 
 .btn-info:hover {
-    background-color: #3182ce; /* Darker light blue */
+    background-color: #99dada; /* Darker soft teal */
     transform: translateY(-2px);
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
@@ -254,8 +305,8 @@ h4 {
 
 /* Dynamic Item Lists (Education, Experience, Skills etc.) */
 .dynamic-item {
-    background-color: #fefcbf; /* Light yellow */
-    border: 1px solid #fbd38d; /* Yellow border */
+    background-color: #f8f8f8; /* Off-white, slightly warmer than body background */
+    border: 1px solid #e0e7eb; /* Light gray border */
     padding: 15px;
     border-radius: 10px;
     margin-bottom: 15px;
@@ -276,7 +327,7 @@ h4 {
 .dynamic-item .form-group label {
     font-size: 0.9em;
     margin-bottom: 5px;
-    color: #664d03; /* Darker yellow text */
+    color: #5d7a94; /* Medium muted blue */
 }
 
 .dynamic-item .remove-btn {
@@ -298,7 +349,7 @@ h4 {
 
 .file-input-group input[type="file"] {
     flex-grow: 1;
-    border: 1px solid #cbd5e0;
+    border: 1px solid #cdd4da;
     border-radius: 8px;
     padding: 8px;
     background-color: #ffffff;
@@ -323,27 +374,27 @@ h4 {
 }
 
 .alert-success {
-    background-color: #d4edda; /* Light green */
-    color: #155724; /* Dark green text */
-    border: 1px solid #c3e6cb;
+    background-color: #d9f7d9; /* Very light green */
+    color: #1a5e1a; /* Dark green text */
+    border: 1px solid #c1edc1;
 }
 
 .alert-error {
-    background-color: #f8d7da; /* Light red */
-    color: #721c24; /* Dark red text */
-    border: 1px solid #f5c6cb;
+    background-color: #f7d9d9; /* Very light red */
+    color: #7a1a1a; /* Dark red text */
+    border: 1px solid #edc1c1;
 }
 
 .alert-warning {
-    background-color: #fff3cd; /* Light yellow */
-    color: #856404; /* Dark yellow text */
-    border: 1px solid #ffeeba;
+    background-color: #fff7d9; /* Very light yellow */
+    color: #7a6a1a; /* Dark yellow text */
+    border: 1px solid #ede1c1;
 }
 
 .alert-info {
-    background-color: #d1ecf1; /* Light blue */
-    color: #0c5460; /* Dark blue text */
-    border: 1px solid #bee5eb;
+    background-color: #d9f0f7; /* Very light blue */
+    color: #1a6a7a; /* Dark blue text */
+    border: 1px solid #c1e1ed;
 }
 
 @keyframes fadeOut {
@@ -359,21 +410,21 @@ h4 {
 /* Application List (Cards View) */
 .application-list-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); /* Default for smaller screens */
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 25px;
     margin-top: 20px;
 }
 
 /* Force 3 columns on larger screens */
-@media (min-width: 992px) { /* Adjust breakpoint as needed, e.g., 768px for tablet, 992px for desktop */
+@media (min-width: 992px) {
     .application-list-cards {
         grid-template-columns: repeat(3, 1fr);
     }
 }
 
 .application-card {
-    background-color: #fefcbf; /* Light yellow for cards */
-    border: 1px solid #fbd38d;
+    background-color: #f8f8f8; /* Off-white for cards */
+    border: 1px solid #e0e7eb;
     border-radius: 12px;
     padding: 20px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
@@ -387,7 +438,7 @@ h4 {
 
 .application-card h4 {
     margin-top: 0;
-    color: #664d03; /* Darker yellow text for card title */
+    color: #5d7a94; /* Medium muted blue for card title */
 }
 
 .application-card p {
@@ -401,14 +452,14 @@ h4 {
     border-radius: 20px;
     font-size: 0.8em;
     font-weight: 600;
-    color: white;
+    color: #2d3748; /* Dark text for badges */
     text-transform: uppercase;
 }
 
-.status-applied { background-color: #4299e1; } /* Blue */
-.status-interview { background-color: #f6ad55; } /* Orange */
-.status-rejection { background-color: #ef4444; } /* Red */
-.status-offer { background-color: #48bb78; } /* Green */
+.status-applied { background-color: #a7c7e7; } /* Soft blue */
+.status-interview { background-color: #ffe0b2; } /* Soft orange */
+.status-rejection { background-color: #ffb2b2; } /* Soft red */
+.status-offer { background-color: #b2e8b2; } /* Soft green */
 
 .card-actions {
     margin-top: 15px;
@@ -424,7 +475,7 @@ h4 {
     margin-top: 20px;
     background-color: #ffffff;
     border-radius: 12px;
-    overflow: hidden; /* Ensures rounded corners apply to table content */
+    overflow: hidden;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
 }
 
@@ -432,20 +483,20 @@ h4 {
 .application-list-table td {
     padding: 15px;
     text-align: left;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e0e7eb;
 }
 
 .application-list-table th {
-    background-color: #edf2f7; /* Light gray header */
+    background-color: #f0f4f8; /* Light blue-gray header */
     color: #4a5568;
     font-weight: 700;
     text-transform: uppercase;
     font-size: 0.9em;
-    cursor: pointer; /* Indicate sortable */
+    cursor: pointer;
 }
 
 .application-list-table th:hover {
-    background-color: #dae4ed; /* Slightly darker on hover */
+    background-color: #e2eaf0; /* Slightly darker on hover */
 }
 
 .application-list-table tr:last-child td {
@@ -459,10 +510,11 @@ h4 {
 .application-list-table td .status-select {
     padding: 8px 12px;
     border-radius: 8px;
-    border: 1px solid #cbd5e0;
+    border: 1px solid #cdd4da;
     background-color: #ffffff;
     font-size: 0.9em;
     cursor: pointer;
+    color: #2d3748; /* Dark text */
 }
 
 /* Filter and View Toggle */
@@ -471,57 +523,57 @@ h4 {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-    flex-wrap: wrap; /* Allow wrapping */
-    gap: 15px; /* Space between items */
+    flex-wrap: wrap;
+    gap: 15px;
 }
 
 .filter-sort-controls .form-group {
-    margin-bottom: 0; /* Remove default margin */
-    flex: 1; /* Allow items to grow */
-    min-width: 200px; /* Minimum width before wrapping */
+    margin-bottom: 0;
+    flex: 1;
+    min-width: 200px;
 }
 
 .filter-sort-controls .form-group input,
 .filter-sort-controls .form-group select {
-    width: 100%; /* Make inputs/selects take full width of their flex item */
+    width: 100%;
 }
 
-/* Modal Styles (Crucial for the confirmation dialog) */
+/* Modal Styles */
 .modal {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black background */
+    background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black background */
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 1000;
-    opacity: 0; /* Start hidden */
-    visibility: hidden; /* Start hidden */
+    opacity: 0;
+    visibility: hidden;
     transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .modal.active {
-    opacity: 1; /* Fade in */
-    visibility: visible; /* Make visible */
+    opacity: 1;
+    visibility: visible;
 }
 
 .modal-content {
     background-color: #ffffff;
     padding: 30px;
     border-radius: 12px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
     text-align: center;
     max-width: 450px;
     width: 90%;
-    transform: translateY(-20px); /* Start slightly above center */
+    transform: translateY(-20px);
     transition: transform 0.3s ease;
 }
 
 .modal.active .modal-content {
-    transform: translateY(0); /* Slide into place */
+    transform: translateY(0);
 }
 
 .modal-content p {
@@ -539,7 +591,7 @@ h4 {
 /* Interview Detail Modal */
 #interview-detail-modal .modal-content,
 #application-detail-modal .modal-content {
-    text-align: left; /* Align text left for details */
+    text-align: left;
     max-width: 600px;
 }
 
@@ -547,7 +599,7 @@ h4 {
 #application-detail-modal h3 {
     margin-top: 0;
     margin-bottom: 15px;
-    color: #2c5282;
+    color: #4a698c;
 }
 
 #interview-detail-modal p,
@@ -558,12 +610,12 @@ h4 {
 
 #interview-detail-modal strong,
 #application-detail-modal strong {
-    color: #4a5568;
+    color: #5d7a94;
 }
 
 #interview-detail-modal .modal-actions,
 #application-detail-modal .modal-actions {
-    justify-content: flex-end; /* Align buttons to the right */
+    justify-content: flex-end;
     margin-top: 20px;
 }
 
@@ -573,7 +625,7 @@ h4 {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-    background-color: #edf2f7;
+    background-color: #eaf2f7; /* Very light blue */
     padding: 15px 20px;
     border-radius: 10px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.05);
@@ -581,7 +633,7 @@ h4 {
 
 .calendar-header h3 {
     margin: 0;
-    color: #2c5282;
+    color: #4a698c;
 }
 
 .calendar-grid {
@@ -594,39 +646,39 @@ h4 {
     font-weight: 700;
     text-align: center;
     padding: 10px;
-    background-color: #e2e8f0;
+    background-color: #e0e7eb; /* Light gray */
     border-radius: 8px;
-    color: #4a5568;
+    color: #5d7a94;
 }
 
 .calendar-day {
-    min-height: 120px; /* Ensure enough space for events */
+    min-height: 120px;
     background-color: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #e0e7eb;
     border-radius: 8px;
     padding: 10px;
     display: flex;
     flex-direction: column;
     gap: 5px;
     position: relative;
-    overflow: hidden; /* Hide overflow for events */
+    overflow: hidden;
 }
 
 .calendar-day.empty {
-    background-color: #f0f4f8;
-    border: 1px dashed #cbd5e0;
+    background-color: #f0f4f8; /* Very light blue-gray */
+    border: 1px dashed #cdd4da;
 }
 
 .calendar-day .day-number {
     font-weight: 700;
     font-size: 1.2em;
-    color: #2c5282;
+    color: #4a698c;
     margin-bottom: 5px;
 }
 
 .calendar-event {
-    background-color: #90cdf4; /* Light blue for events */
-    color: #2c5282;
+    background-color: #c1d9f0; /* Soft blue for events */
+    color: #2d3748;
     padding: 5px 8px;
     border-radius: 5px;
     font-size: 0.85em;
@@ -638,7 +690,7 @@ h4 {
 }
 
 .calendar-event:hover {
-    background-color: #63b3ed; /* Slightly darker blue on hover */
+    background-color: #a7c7e7; /* Slightly darker soft blue on hover */
 }
 
 .calendar-event .event-time {
@@ -654,7 +706,7 @@ h4 {
 .monthly-interview-list-container {
     margin-top: 30px;
     background-color: #ffffff;
-    padding: 20px; /* Add padding to the container */
+    padding: 20px;
     border-radius: 12px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
 }
@@ -662,31 +714,29 @@ h4 {
 .interview-list-table {
     width: 100%;
     border-collapse: collapse;
-    /* margin-top: 20px; Removed as container has padding */
     background-color: #ffffff;
     border-radius: 12px;
-    overflow: hidden; /* Ensures rounded corners apply to table content */
-    /* box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08); Removed as container has shadow */
+    overflow: hidden;
 }
 
 .interview-list-table th,
 .interview-list-table td {
     padding: 15px;
     text-align: left;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e0e7eb;
 }
 
 .interview-list-table th {
-    background-color: #edf2f7; /* Light gray header */
+    background-color: #f0f4f8;
     color: #4a5568;
     font-weight: 700;
     text-transform: uppercase;
     font-size: 0.9em;
-    cursor: pointer; /* Indicate sortable */
+    cursor: pointer;
 }
 
 .interview-list-table th:hover {
-    background-color: #dae4ed; /* Slightly darker on hover */
+    background-color: #e2eaf0;
 }
 
 .interview-list-table tr:last-child td {
@@ -694,20 +744,20 @@ h4 {
 }
 
 .interview-list-table tr:hover {
-    background-color: #f0f4f8; /* Light blue-gray on hover */
+    background-color: #f0f4f8;
 }
 
 /* Mini Calendars */
 .mini-calendars-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Two columns, responsive */
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 20px;
     margin-top: 20px;
 }
 
 .mini-calendar {
     background-color: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #e0e7eb;
     border-radius: 12px;
     padding: 15px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
@@ -716,7 +766,7 @@ h4 {
 .mini-calendar-header {
     text-align: center;
     margin-bottom: 10px;
-    color: #2c5282;
+    color: #4a698c;
 }
 
 .mini-calendar-header h4 {
@@ -734,7 +784,7 @@ h4 {
 .mini-calendar-day-header {
     text-align: center;
     font-weight: 600;
-    color: #718096;
+    color: #7a8c9e;
 }
 
 .mini-calendar-day {
@@ -747,11 +797,11 @@ h4 {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 30px; /* Ensure some height for days */
+    min-height: 30px;
 }
 
 .mini-calendar-day.empty {
-    background-color: #edf2f7;
+    background-color: #e0e7eb;
 }
 
 .mini-day-number {
@@ -762,7 +812,7 @@ h4 {
 .mini-event-indicator {
     width: 6px;
     height: 6px;
-    background-color: #4299e1; /* Blue dot for events */
+    background-color: #a7c7e7; /* Soft blue dot for events */
     border-radius: 50%;
     margin-top: 2px;
 }
@@ -783,25 +833,25 @@ h4 {
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
     display: flex;
     flex-direction: column;
-    align-items: center; /* Center chart title and canvas */
+    align-items: center;
 }
 
 .chart-container h4 {
     margin-top: 0;
     margin-bottom: 15px;
-    color: #2c5282;
+    color: #4a698c;
     text-align: center;
 }
 
 .chart-canvas {
-    max-width: 100%; /* Ensure canvas is responsive */
-    height: 300px; /* Fixed height for consistency */
+    max-width: 100%;
+    height: 300px;
 }
 
 /* AI Tools Section */
 .ai-tool-section {
-    background-color: #ebf8ff; /* Very light blue */
-    border: 1px solid #bee3f8;
+    background-color: #eaf2f7; /* Very light pastel blue */
+    border: 1px solid #c1d9ed;
     padding: 25px;
     border-radius: 12px;
     margin-bottom: 30px;
@@ -809,7 +859,7 @@ h4 {
 }
 
 .ai-tool-section h3 {
-    color: #2c5282;
+    color: #4a698c;
     margin-top: 0;
 }
 
@@ -818,8 +868,8 @@ h4 {
 }
 
 .ai-result-box {
-    background-color: #e6fffa; /* Light teal */
-    border: 1px solid #81e6d9;
+    background-color: #e6f7f2; /* Light pastel green */
+    border: 1px solid #b2e0d9;
     padding: 20px;
     border-radius: 10px;
     margin-top: 20px;
@@ -829,7 +879,7 @@ h4 {
 }
 
 .ai-result-box h4 {
-    color: #234e52;
+    color: #2e6b6b; /* Darker teal */
     margin-top: 0;
 }
 
@@ -841,7 +891,8 @@ h4 {
     background-color: #ffffff;
     padding: 15px;
     border-radius: 8px;
-    border: 1px solid #b2f5ea;
+    border: 1px solid #c1edeb;
+    color: #2d3748; /* Dark text */
 }
 
 .loading-indicator {
@@ -856,7 +907,7 @@ h4 {
 
 .spinner {
     border: 4px solid rgba(0, 0, 0, 0.1);
-    border-left-color: #3182ce;
+    border-left-color: #6a8ec2; /* Soft blue spinner */
     border-radius: 50%;
     width: 24px;
     height: 24px;
@@ -866,6 +917,67 @@ h4 {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+/* Chatbot specific styles */
+.chat-container {
+    border: 1px solid #cdd4da;
+    border-radius: 12px;
+    padding: 15px;
+    background-color: #f8f8f8;
+    display: flex;
+    flex-direction: column;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-top: 20px;
+}
+
+.chat-display {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding-bottom: 10px;
+}
+
+.chat-message {
+    margin-bottom: 10px;
+    padding: 10px 15px;
+    border-radius: 15px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.user-message {
+    background-color: #a7c7e7; /* Soft blue for user messages */
+    color: #2d3748;
+    align-self: flex-end;
+    margin-left: auto;
+    border-bottom-right-radius: 2px;
+}
+
+.bot-message {
+    background-color: #e0e7eb; /* Light gray for bot messages */
+    color: #2d3748;
+    align-self: flex-start;
+    margin-right: auto;
+    border-bottom-left-radius: 2px;
+}
+
+.chat-input-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.chat-input-group input {
+    flex-grow: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #cdd4da;
+}
+
+.chat-input-group button {
+    padding: 10px 15px;
+}
+
 
 /* Responsive Adjustments */
 @media (max-width: 768px) {
@@ -919,17 +1031,38 @@ h4 {
         width: 100%;
     }
 
-    /* On small screens, cards remain single column or auto-fill */
     .application-list-cards {
-        grid-template-columns: 1fr; /* Default to single column on very small screens */
+        grid-template-columns: 1fr;
     }
 
     .dashboard-charts {
         grid-template-columns: 1fr;
     }
 
-    /* Mini calendars stack on small screens */
     .mini-calendars-container {
         grid-template-columns: 1fr;
+    }
+
+    .dropdown-content {
+        position: static; /* Make dropdown content flow naturally */
+        transform: none;
+        box-shadow: none;
+        border: none;
+        padding: 0;
+        margin-top: 0;
+    }
+
+    .dropdown-content a {
+        border-bottom: 1px solid #e0e7eb; /* Add separators for clarity */
+        border-radius: 0;
+    }
+    .dropdown-content a:first-child {
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+    }
+    .dropdown-content a:last-child {
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+        border-bottom: none;
     }
 }
