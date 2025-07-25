@@ -506,9 +506,18 @@
         <!-- Dashboard Tab -->
         <div id="dashboard" class="tab-content">
             <h2>Dashboard Overview</h2>
-            <div class="form-group" style="max-width: 200px;">
-                <label for="dashboard-month-select">Select Month</label>
-                <input type="month" id="dashboard-month-select">
+            <div class="dashboard-controls">
+                <div class="form-group" style="max-width: 200px;">
+                    <label for="dashboard-view-toggle">View Data For</label>
+                    <select id="dashboard-view-toggle">
+                        <option value="monthly">Current Month</option>
+                        <option value="all-time">All Time</option>
+                    </select>
+                </div>
+                <div class="form-group" id="dashboard-month-selector" style="max-width: 200px;">
+                    <label for="dashboard-month-select">Select Month</label>
+                    <input type="month" id="dashboard-month-select">
+                </div>
             </div>
 
             <div class="dashboard-charts">
