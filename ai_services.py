@@ -230,7 +230,6 @@ Education:
                                   api_key: str) -> str:
         """Estimate job chance based on profile and job description"""
         profile_text = self._format_profile_for_ai(profile)
-
         prompt = f"""
         Analyze the following candidate profile against the provided job description.
         Candidate Profile:

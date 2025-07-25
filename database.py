@@ -49,6 +49,8 @@ class Database:
 
     async def _create_tables(self):
         """Creates necessary tables if they don't exist."""
+        # Drop and recreate job_applications table to ensure all columns are present
+        # await self._execute("DROP TABLE IF EXISTS job_applications CASCADE;")
         await self._execute("""
                             CREATE TABLE IF NOT EXISTS job_applications
                             (
@@ -70,11 +72,13 @@ class Database:
                                 application_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                                                                status VARCHAR (50) DEFAULT 'Applied',
                                 cv_file TEXT,
-                                cover_letter TEXT
-                                );
+                                cover_letter TEXT,
+                                last_updated TIMESTAMP
+                                                           WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+                                                               );
                             """)
         # Drop and recreate user_profiles table to ensure all columns are present
-        await self._execute("DROP TABLE IF EXISTS user_profiles CASCADE;")
+        # await self._execute("DROP TABLE IF EXISTS user_profiles CASCADE;")
         await self._execute("""
                             CREATE TABLE IF NOT EXISTS user_profiles
                             (
@@ -138,7 +142,7 @@ class Database:
 
     async def get_all_applications(self) -> List[JobApplication]:
         """Retrieves all job applications from the database."""
-        query = "SELECT id, job_title, company, description, link, application_date, status, cv_file, cover_letter FROM job_applications;"
+        query = "SELECT id, job_title, company, description, link, application_date, status, cv_file, cover_letter, last_updated FROM job_applications;"
         records = await self._fetch_all(query)
         # Convert ID to string for Pydantic model
         for record in records:
@@ -148,7 +152,7 @@ class Database:
 
     async def get_application(self, application_id: str) -> Optional[JobApplication]:
         """Retrieves a single job application by its ID."""
-        query = "SELECT id, job_title, company, description, link, application_date, status, cv_file, cover_letter FROM job_applications WHERE id = $1;"
+        query = "SELECT id, job_title, company, description, link, application_date, status, cv_file, cover_letter, last_updated FROM job_applications WHERE id = $1;"
         record = await self._fetch_one(query, int(application_id))
         if record and 'id' in record and record['id'] is not None:
             record['id'] = str(record['id'])
@@ -160,7 +164,7 @@ class Database:
                 INSERT INTO job_applications (job_title, company, description, link, application_date, status, cv_file, \
                                               cover_letter)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, \
-                        $8) RETURNING id, job_title, company, description, link, application_date, status, cv_file, cover_letter; \
+                        $8) RETURNING id, job_title, company, description, link, application_date, status, cv_file, cover_letter, last_updated; \
                 """
         record = await self._fetch_one(
             query,
@@ -188,8 +192,9 @@ class Database:
                     application_date = $5, \
                     status           = $6, \
                     cv_file          = $7, \
-                    cover_letter     = $8
-                WHERE id = $9 RETURNING id, job_title, company, description, link, application_date, status, cv_file, cover_letter; \
+                    cover_letter     = $8, \
+                    last_updated     = CURRENT_TIMESTAMP
+                WHERE id = $9 RETURNING id, job_title, company, description, link, application_date, status, cv_file, cover_letter, last_updated; \
                 """
         record = await self._fetch_one(
             query,

@@ -50,7 +50,8 @@ function appendChatMessage(message, sender) {
     const chatDisplay = document.getElementById('qa-chat-display');
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-message ${sender}-message`;
-    messageDiv.textContent = message;
+    // Use innerHTML to render potentially formatted messages (e.g., from AI)
+    messageDiv.innerHTML = message;
     chatDisplay.appendChild(messageDiv);
     chatDisplay.scrollTop = chatDisplay.scrollHeight; // Scroll to bottom
 }
@@ -79,15 +80,26 @@ async function estimateJobChance() {
     try {
         // Ensure profile data is loaded before sending
         await loadProfile();
-        const response = await fetch('/api/ai/estimate-chance', {
+
+        // IMPORTANT: Check if window.profile is properly loaded
+        if (!window.profile || Object.keys(window.profile).length === 0) {
+            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
+            chanceLoading.style.display = 'none';
+            return;
+        }
+
+        // CORRECTED: Send as JSON payload
+        const requestBody = {
+            job_description: jobDescription,
+            profile: window.profile, // Use the globally loaded profile
+            ai_provider: aiProvider,
+            api_key: apiKey
+        };
+        console.log(requestBody);
+        const response = await fetch('/api/ai/estimate-chance', { // CORRECTED API endpoint path
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                job_description: jobDescription,
-                profile: profile, // Use the globally loaded profile
-                ai_provider: aiProvider,
-                api_key: apiKey
-            })
+            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
+            body: JSON.stringify(requestBody) // Stringify the JSON object
         });
 
         if (response.ok) {
@@ -96,8 +108,23 @@ async function estimateJobChance() {
             openHtmlResultWindow('Job Chance Estimation Result', formattedHtml);
             showAlert('Job chance estimated successfully! Result opened in a new window.', 'success');
         } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to estimate job chance.');
+            let errorMessage = 'Failed to estimate job chance.';
+            try {
+                const errorData = await response.json();
+                if (errorData.detail && Array.isArray(errorData.detail)) {
+                    errorMessage = errorData.detail.map(err => {
+                        const loc = err.loc ? err.loc.join('.') : 'unknown';
+                        return `${loc}: ${err.msg}`;
+                    }).join('\n');
+                } else if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                } else {
+                    errorMessage = await response.text(); // Fallback to text if no JSON detail
+                }
+            } catch (parseError) {
+                errorMessage = await response.text(); // Use raw text if JSON parsing fails
+            }
+            throw new Error(errorMessage);
         }
     } catch (error) {
         console.error('Error estimating job chance:', error);
@@ -130,15 +157,22 @@ async function tuneCv() {
 
     try {
         await loadProfile();
-        const response = await fetch('/api/ai/tune-cv', {
+        if (!window.profile || Object.keys(window.profile).length === 0) {
+            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
+            cvLoading.style.display = 'none';
+            return;
+        }
+        // CORRECTED: Send as JSON payload
+        const requestBody = {
+            job_description: jobDescription,
+            profile: window.profile,
+            ai_provider: aiProvider,
+            api_key: apiKey
+        };
+        const response = await fetch('/api/ai/tune-cv', { // CORRECTED API endpoint path
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                job_description: jobDescription,
-                profile: profile,
-                ai_provider: aiProvider,
-                api_key: apiKey
-            })
+            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
+            body: JSON.stringify(requestBody) // Stringify the JSON object
         });
 
         if (response.ok) {
@@ -147,8 +181,23 @@ async function tuneCv() {
             openHtmlResultWindow('Tuned CV Suggestions', formattedHtml);
             showAlert('CV tuned successfully! Result opened in a new window.', 'success');
         } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to tune CV.');
+            let errorMessage = 'Failed to tune CV.';
+            try {
+                const errorData = await response.json();
+                if (errorData.detail && Array.isArray(errorData.detail)) {
+                    errorMessage = errorData.detail.map(err => {
+                        const loc = err.loc ? err.loc.join('.') : 'unknown';
+                        return `${loc}: ${err.msg}`;
+                    }).join('\n');
+                } else if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                } else {
+                    errorMessage = await response.text();
+                }
+            } catch (parseError) {
+                errorMessage = await response.text();
+            }
+            throw new Error(errorMessage);
         }
     } catch (error) {
         console.error('Error tuning CV:', error);
@@ -181,15 +230,22 @@ async function generateCoverLetter() {
 
     try {
         await loadProfile();
+        if (!window.profile || Object.keys(window.profile).length === 0) {
+            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
+            loadingDiv.style.display = 'none';
+            return;
+        }
+        // This function was already correct, sending JSON payload
+        const requestBody = {
+            job_description: jobDescription,
+            profile: window.profile,
+            ai_provider: aiProvider,
+            api_key: apiKey
+        };
         const response = await fetch('/api/ai/cover-letter', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                job_description: jobDescription,
-                profile: profile,
-                ai_provider: aiProvider,
-                api_key: apiKey
-            })
+            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
+            body: JSON.stringify(requestBody) // Stringify the JSON object
         });
 
         if (response.ok) {
@@ -198,8 +254,23 @@ async function generateCoverLetter() {
             openHtmlResultWindow('Generated Cover Letter', formattedHtml);
             showAlert('Cover letter generated successfully! Result opened in a new window.', 'success');
         } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to generate cover letter.');
+            let errorMessage = 'Failed to generate cover letter.';
+            try {
+                const errorData = await response.json();
+                if (errorData.detail && Array.isArray(errorData.detail)) {
+                    errorMessage = errorData.detail.map(err => {
+                        const loc = err.loc ? err.loc.join('.') : 'unknown';
+                        return `${loc}: ${err.msg}`;
+                    }).join('\n');
+                } else if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                } else {
+                    errorMessage = await response.text();
+                }
+            } catch (parseError) {
+                errorMessage = await response.text();
+            }
+            throw new Error(errorMessage);
         }
     } catch (error) {
         console.error('Error generating cover letter:', error);
@@ -238,26 +309,49 @@ async function sendInterviewQaMessage() {
 
     try {
         await loadProfile();
+        if (!window.profile || Object.keys(window.profile).length === 0) {
+            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
+            loadingDiv.style.display = 'none';
+            return;
+        }
+        // This function was already correct, sending JSON payload
+        const requestBody = {
+            job_title: jobTitle,
+            profile: window.profile,
+            chat_history: interviewQaChatHistory,
+            ai_provider: aiProvider,
+            api_key: apiKey
+        };
         const response = await fetch('/api/ai/interview-qa', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                job_title: jobTitle,
-                profile: profile,
-                chat_history: interviewQaChatHistory,
-                ai_provider: aiProvider,
-                api_key: apiKey
-            })
+            body: JSON.stringify(requestBody)
         });
 
         if (response.ok) {
             const data = await response.json();
             const botResponse = data.response;
-            appendChatMessage(botResponse, 'bot');
+            const formattedBotResponse = formatAiResultToHtml(botResponse);
+            appendChatMessage(formattedBotResponse, 'bot');
             interviewQaChatHistory.push({ role: "assistant", content: botResponse });
         } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to get AI response.');
+            let errorMessage = 'Failed to get AI response.';
+            try {
+                const errorData = await response.json();
+                if (errorData.detail && Array.isArray(errorData.detail)) {
+                    errorMessage = errorData.detail.map(err => {
+                        const loc = err.loc ? err.loc.join('.') : 'unknown';
+                        return `${loc}: ${err.msg}`;
+                    }).join('\n');
+                } else if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                } else {
+                    errorMessage = await response.text();
+                }
+            } catch (parseError) {
+                errorMessage = await response.text();
+            }
+            throw new Error(errorMessage);
         }
     } catch (error) {
         console.error('Error in Interview Q&A:', error);
@@ -288,15 +382,22 @@ async function extractSkills() {
 
     try {
         await loadProfile();
+        if (!window.profile || Object.keys(window.profile).length === 0) {
+            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
+            loadingDiv.style.display = 'none';
+            return;
+        }
+        // This function was already correct, sending JSON payload
+        const requestBody = {
+            job_description: jobDescription,
+            profile: window.profile,
+            ai_provider: aiProvider,
+            api_key: apiKey
+        };
         const response = await fetch('/api/ai/skill-extractor', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                job_description: jobDescription,
-                profile: profile,
-                ai_provider: aiProvider,
-                api_key: apiKey
-            })
+            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
+            body: JSON.stringify(requestBody) // Stringify the JSON object
         });
 
         if (response.ok) {
@@ -305,8 +406,23 @@ async function extractSkills() {
             openHtmlResultWindow('Skill Extraction & Analysis Result', formattedHtml);
             showAlert('Skills extracted and analyzed successfully! Result opened in a new window.', 'success');
         } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to extract skills.');
+            let errorMessage = 'Failed to extract skills.';
+            try {
+                const errorData = await response.json();
+                if (errorData.detail && Array.isArray(errorData.detail)) {
+                    errorMessage = errorData.detail.map(err => {
+                        const loc = err.loc ? err.loc.join('.') : 'unknown';
+                        return `${loc}: ${err.msg}`;
+                    }).join('\n');
+                } else if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                } else {
+                    errorMessage = await response.text();
+                }
+            } catch (parseError) {
+                errorMessage = await response.text();
+            }
+            throw new Error(errorMessage);
         }
     } catch (error) {
         console.error('Error extracting skills:', error);
@@ -338,14 +454,16 @@ async function craftInterviewQuestions() {
     }
 
     try {
+        // This function was already correct, sending JSON payload
+        const requestBody = {
+            candidate_info: candidateInfo,
+            ai_provider: aiProvider,
+            api_key: apiKey
+        };
         const response = await fetch('/api/ai/craft-interview-questions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                candidate_info: candidateInfo,
-                ai_provider: aiProvider,
-                api_key: apiKey
-            })
+            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
+            body: JSON.stringify(requestBody) // Stringify the JSON object
         });
 
         if (response.ok) {
@@ -354,8 +472,23 @@ async function craftInterviewQuestions() {
             openHtmlResultWindow('Generated Interview Questions', formattedHtml);
             showAlert('Interview questions generated successfully! Result opened in a new window.', 'success');
         } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to craft interview questions.');
+            let errorMessage = 'Failed to craft interview questions.';
+            try {
+                const errorData = await response.json();
+                if (errorData.detail && Array.isArray(errorData.detail)) {
+                    errorMessage = errorData.detail.map(err => {
+                        const loc = err.loc ? err.loc.join('.') : 'unknown';
+                        return `${loc}: ${err.msg}`;
+                    }).join('\n');
+                } else if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                } else {
+                    errorMessage = await response.text();
+                }
+            } catch (parseError) {
+                errorMessage = await response.text();
+            }
+            throw new Error(errorMessage);
         }
     } catch (error) {
         console.error('Error crafting interview questions:', error);
@@ -387,14 +520,16 @@ async function researchCompanyWebsite() {
     }
 
     try {
+        // This function was already correct, sending JSON payload
+        const requestBody = {
+            company_url: companyUrl,
+            ai_provider: aiProvider,
+            api_key: apiKey
+        };
         const response = await fetch('/api/ai/company-research', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                company_url: companyUrl,
-                ai_provider: aiProvider,
-                api_key: apiKey
-            })
+            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
+            body: JSON.stringify(requestBody) // Stringify the JSON object
         });
 
         if (response.ok) {
@@ -403,8 +538,23 @@ async function researchCompanyWebsite() {
             openHtmlResultWindow('Company Research Result', formattedHtml);
             showAlert('Company research completed successfully! Result opened in a new window.', 'success');
         } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to research company.');
+            let errorMessage = 'Failed to research company.';
+            try {
+                const errorData = await response.json();
+                if (errorData.detail && Array.isArray(errorData.detail)) {
+                    errorMessage = errorData.detail.map(err => {
+                        const loc = err.loc ? err.loc.join('.') : 'unknown';
+                        return `${loc}: ${err.msg}`;
+                    }).join('\n');
+                } else if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                } else {
+                    errorMessage = await response.text();
+                }
+            } catch (parseError) {
+                errorMessage = await response.text();
+            }
+            throw new Error(errorMessage);
         }
     } catch (error) {
         console.error('Error researching company:', error);
@@ -437,25 +587,47 @@ async function generateAboutMeAnswer() {
 
     try {
         await loadProfile();
+        if (!window.profile || Object.keys(window.profile).length === 0) {
+            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
+            loadingDiv.style.display = 'none';
+            return;
+        }
+        // This function was already correct, sending JSON payload
+        const requestBody = {
+            job_description: jobDescription,
+            profile: window.profile,
+            ai_provider: aiProvider,
+            api_key: apiKey
+        };
         const response = await fetch('/api/ai/about-me-answer', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                job_description: jobDescription,
-                profile: profile,
-                ai_provider: aiProvider,
-                api_key: apiKey
-            })
+            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
+            body: JSON.stringify(requestBody) // Stringify the JSON object
         });
 
         if (response.ok) {
             const data = await response.json();
             const formattedHtml = formatAiResultToHtml(data.result);
             openHtmlResultWindow('Tuned "About Me" Answer', formattedHtml);
-            showAlert('"About Me" answer generated successfully! Result opened in a new window.', 'success');
+            showAlert('About Me" answer generated successfully! Result opened in a new window.', 'success');
         } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to generate "About Me" answer.');
+            let errorMessage = 'Failed to generate "About Me" answer.';
+            try {
+                const errorData = await response.json();
+                if (errorData.detail && Array.isArray(errorData.detail)) {
+                    errorMessage = errorData.detail.map(err => {
+                        const loc = err.loc ? err.loc.join('.') : 'unknown';
+                        return `${loc}: ${err.msg}`;
+                    }).join('\n');
+                } else if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                } else {
+                    errorMessage = await response.text();
+                }
+            } catch (parseError) {
+                errorMessage = await response.text();
+            }
+            throw new Error(errorMessage);
         }
     } catch (error) {
         console.error('Error generating "About Me" answer:', error);
@@ -469,6 +641,7 @@ async function generateAboutMeAnswer() {
 
 /**
  * Handles the "Fill Profile from Resume (AI)" AI service request.
+ * This function correctly uses FormData because it involves a file upload.
  */
 async function fillProfileFromResumeAI() {
     const resumeFile = document.getElementById('resume-pdf-input').files[0];
@@ -499,7 +672,7 @@ async function fillProfileFromResumeAI() {
     try {
         const response = await fetch('/api/ai/profile/fill-from-resume-ai', {
             method: 'POST',
-            body: formData
+            body: formData // FormData is used here for file upload
         });
 
         if (response.ok) {
@@ -512,9 +685,18 @@ async function fillProfileFromResumeAI() {
             let errorMessage;
             try {
                 const errorData = await response.json();
-                errorMessage = errorData.detail || 'Failed to fill profile from resume';
+                if (errorData.detail && Array.isArray(errorData.detail)) {
+                    errorMessage = errorData.detail.map(err => {
+                        const loc = err.loc ? err.loc.join('.') : 'unknown';
+                        return `${loc}: ${err.msg}`;
+                    }).join('\n');
+                } else if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                } else {
+                    errorMessage = await response.text();
+                }
             } catch (parseError) {
-                errorMessage = await response.text() || `HTTP Error: ${response.status}`;
+                errorMessage = await response.text();
             }
             throw new Error(errorMessage);
         }

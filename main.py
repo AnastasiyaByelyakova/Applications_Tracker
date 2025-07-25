@@ -1,54 +1,42 @@
-import os
-import shutil
-from contextlib import asynccontextmanager
-from typing import List, Optional, Dict, Any
-
-from fastapi import FastAPI, UploadFile, File, HTTPException, status, Request, Form
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-from datetime import datetime
+from typing import List, Optional, Dict, Any
+from datetime import datetime, date
+import os
 import json
 
-# Assuming these models are defined in models.py
-from models import JobApplication, UserProfile, Interview, ApplicationStatus, AIProvider, Education, Experience, Skill
-# Assuming Database class is defined in database.py
+from pydantic import BaseModel # Import BaseModel for request body validation
+
 from database import Database
-# Assuming AIService class is defined in ai_services.py
+from models import JobApplication, UserProfile, Interview, ApplicationStatus, AIProvider
 from ai_services import AIService
 
-# Initialize database and AI service globally
+app = FastAPI()
 db = Database()
 ai_service = AIService()
 
-# Directory for uploaded files
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# Ensure uploads directory exists
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Context manager for application startup and shutdown events.
-    Connects to the database on startup and closes the connection on shutdown.
-    """
-    print("Starting up...")
+@app.on_event("startup")
+async def startup_event():
     await db.connect()
-    yield
-    print("Shutting down...")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
     await db.close()
-
-
-app = FastAPI(lifespan=lifespan)
-
-# Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
-    """Serve the main HTML page."""
     with open("static/index.html", "r", encoding='utf-8') as f:
         return HTMLResponse(content=f.read())
 
@@ -57,355 +45,331 @@ async def read_root():
 
 @app.get("/api/applications", response_model=List[JobApplication])
 async def get_applications():
-    """Retrieve all job applications."""
-    applications = await db.get_all_applications()
-    return applications
-
-
-@app.post("/api/applications", response_model=JobApplication, status_code=status.HTTP_201_CREATED)
-async def create_application(application: JobApplication):
-    """Create a new job application."""
-    new_application = await db.add_application(application)
-    if not new_application:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to add application.")
-    return new_application
+    return await db.get_all_applications()
 
 
 @app.get("/api/applications/{application_id}", response_model=JobApplication)
 async def get_application(application_id: str):
-    """Retrieve a single job application by ID."""
     application = await db.get_application(application_id)
     if not application:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found.")
+        raise HTTPException(status_code=404, detail="Application not found")
     return application
 
 
+@app.post("/api/applications", response_model=JobApplication)
+async def create_application(
+        job_title: str = Form(...),
+        company: str = Form(...),
+        description: Optional[str] = Form(None),
+        link: Optional[str] = Form(None),
+        application_date: str = Form(..., alias="application_date"),  # Use alias for consistency
+        status: ApplicationStatus = Form(ApplicationStatus.APPLIED),
+        cv_file: Optional[UploadFile] = File(None),
+        cover_letter: Optional[str] = Form(None)
+):
+    cv_file_path = None
+    if cv_file:
+        file_location = os.path.join(UPLOAD_DIR, cv_file.filename)
+        with open(file_location, "wb+") as file_object: # Changed to 'wb+' for binary write
+            file_object.write(await cv_file.read()) # Use await for async file read
+        cv_file_path = file_location
+
+    # Convert application_date string to datetime object
+    try:
+        app_date_obj = datetime.strptime(application_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format for application_date. Use YYYY-MM-DD.")
+
+    application = JobApplication(
+        job_title=job_title,
+        company=company,
+        description=description,
+        link=link,
+        application_date=app_date_obj,
+        status=status,
+        cv_file=cv_file_path,
+        cover_letter=cover_letter
+    )
+    new_application = await db.add_application(application)
+    return new_application
+
+
 @app.put("/api/applications/{application_id}", response_model=JobApplication)
-async def update_application(application_id: str, application: JobApplication):
-    """Update an existing job application."""
+async def update_application(
+        application_id: str,
+        job_title: str = Form(...),
+        company: str = Form(...),
+        description: Optional[str] = Form(None),
+        link: Optional[str] = Form(None),
+        application_date: str = Form(..., alias="application_date"),
+        status: ApplicationStatus = Form(ApplicationStatus.APPLIED),
+        cv_file: Optional[UploadFile] = File(None),
+        cover_letter: Optional[str] = Form(None)
+):
+    existing_application = await db.get_application(application_id)
+    if not existing_application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    cv_file_path = existing_application.cv_file  # Keep existing file if not new one uploaded
+    if cv_file:
+        file_location = os.path.join(UPLOAD_DIR, cv_file.filename)
+        with open(file_location, "wb+") as file_object: # Changed to 'wb+' for binary write
+            file_object.write(await cv_file.read()) # Use await for async file read
+        cv_file_path = file_location
+
+    try:
+        app_date_obj = datetime.strptime(application_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format for application_date. Use YYYY-MM-DD.")
+
+    application = JobApplication(
+        id=application_id,  # Ensure ID is passed for update
+        job_title=job_title,
+        company=company,
+        description=description,
+        link=link,
+        application_date=app_date_obj,
+        status=status,
+        cv_file=cv_file_path,
+        cover_letter=cover_letter
+    )
     updated_application = await db.update_application(application_id, application)
     if not updated_application:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found or update failed.")
+        raise HTTPException(status_code=500, detail="Failed to update application")
     return updated_application
 
 
-@app.delete("/api/applications/{application_id}", status_code=status.HTTP_204_NO_CONTENT)
+@app.delete("/api/applications/{application_id}")
 async def delete_application(application_id: str):
-    """Delete a job application."""
     success = await db.delete_application(application_id)
     if not success:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found.")
-    return {"message": "Application deleted successfully."}
-
-
-@app.post("/api/upload-cv")
-async def upload_cv(file: UploadFile = File(...)):
-    """Upload a CV file for a job application."""
-    try:
-        file_location = os.path.join(UPLOAD_DIR, file.filename)
-        with open(file_location, "wb+") as file_object:
-            shutil.copyfileobj(file.file, file_object)
-        return {"filename": file.filename, "path": f"/uploads/{file.filename}"}
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Could not upload file: {e}")
+        raise HTTPException(status_code=404, detail="Application not found")
+    return {"message": "Application deleted successfully"}
 
 
 # --- User Profile Endpoints ---
 
 @app.get("/api/profile", response_model=UserProfile)
-async def get_user_profile():
-    """Retrieve the user profile."""
+async def get_profile():
     profile = await db.get_user_profile()
     if not profile:
-        # Return an empty but valid UserProfile if none exists
+        # If no profile exists, return a default empty profile structure
+        # This prevents 404 and allows frontend to initialize form
         return UserProfile()
     return profile
 
 
 @app.post("/api/profile", response_model=UserProfile)
-async def save_user_profile(profile: UserProfile):
-    """Save or update the user profile."""
-    # Assuming there's only one user profile, we'll upsert it.
-    # In a multi-user system, you'd associate it with a user ID.
-    saved_profile = await db.save_user_profile(profile)
-    if not saved_profile:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save profile.")
-    return saved_profile
-
-
-@app.post("/api/profile/upload-cv")
-async def upload_profile_cv(file: UploadFile = File(...)):
-    """Upload a master CV file for the user profile."""
+async def save_profile(
+        profile: str = Form(...),  # Receive profile data as a JSON string
+        cv_profile_file: Optional[UploadFile] = File(None)
+):
+    # Parse the JSON string back into a UserProfile Pydantic model
     try:
-        file_location = os.path.join(UPLOAD_DIR, "profile_master_cv.pdf")  # Standardize name for profile CV
-        with open(file_location, "wb+") as file_object:
-            shutil.copyfileobj(file.file, file_object)
-        return {"filename": "profile_master_cv.pdf", "path": f"/uploads/profile_master_cv.pdf"}
+        profile_data = json.loads(profile)
+        user_profile = UserProfile(**profile_data)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON format for profile data.")
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Could not upload profile CV: {e}")
+        raise HTTPException(status_code=422, detail=f"Error parsing profile data: {e}")
+
+    cv_file_path = user_profile.cv_profile_file  # Preserve existing path if not updated
+    if cv_profile_file:
+        file_location = os.path.join(UPLOAD_DIR, cv_profile_file.filename)
+        with open(file_location, "wb+") as file_object: # Changed to 'wb+' for binary write
+            file_object.write(await cv_profile_file.read()) # Use await for async file read
+        cv_file_path = file_location
+    user_profile.cv_profile_file = cv_file_path  # Update the Pydantic model
+
+    saved_profile = await db.save_user_profile(user_profile)
+    if not saved_profile:
+        raise HTTPException(status_code=500, detail="Failed to save profile")
+    return saved_profile
 
 
 # --- Interview Endpoints ---
 
 @app.get("/api/interviews", response_model=List[Interview])
 async def get_interviews(year: Optional[int] = None, month: Optional[int] = None):
-    """Retrieve interviews, optionally filtered by year and month."""
-    interviews = await db.get_interviews_by_month(year, month)
-    return interviews
+    return await db.get_interviews_by_month(year, month)
 
 
-@app.post("/api/interviews", response_model=Interview, status_code=status.HTTP_201_CREATED)
+@app.get("/api/interviews/{interview_id}", response_model=Interview)
+async def get_interview(interview_id: str):
+    interview = await db.get_interview(interview_id)
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    return interview
+
+
+@app.post("/api/interviews", response_model=Interview)
 async def create_interview(interview: Interview):
-    """Schedule a new interview."""
     try:
         new_interview = await db.add_interview(interview)
-        if not new_interview:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to schedule interview.")
         return new_interview
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))  # Conflict for overlaps
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.put("/api/interviews/{interview_id}", response_model=Interview)
 async def update_interview(interview_id: str, interview: Interview):
-    """Update an existing interview."""
     try:
         updated_interview = await db.update_interview(interview_id, interview)
         if not updated_interview:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interview not found or update failed.")
+            raise HTTPException(status_code=404, detail="Interview not found")
         return updated_interview
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))  # Conflict for overlaps
+        raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.delete("/api/interviews/{interview_id}", status_code=status.HTTP_204_NO_CONTENT)
+@app.delete("/api/interviews/{interview_id}")
 async def delete_interview(interview_id: str):
-    """Delete an interview."""
     success = await db.delete_interview(interview_id)
     if not success:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interview not found.")
-    return {"message": "Interview deleted successfully."}
+        raise HTTPException(status_code=404, detail="Interview not found")
+    return {"message": "Interview deleted successfully"}
 
 
 # --- AI Service Endpoints ---
 
-class AiRequest(BaseModel):
-    job_description: Optional[str] = None
-    profile: Optional[UserProfile] = None
+# Pydantic models for AI service request bodies
+class AIAssessmentRequest(BaseModel):
+    job_description: str
+    profile: UserProfile
     ai_provider: AIProvider
     api_key: str
-    candidate_info: Optional[str] = None  # For crafting interview questions
-    company_url: Optional[str] = None  # For company research
-    chat_history: Optional[List[Dict[str, str]]] = None  # For chat bot
-    job_title: Optional[str] = None  # For interview Q&A
+
+class AIRequestWithChatHistory(BaseModel):
+    job_title: str
+    profile: UserProfile
+    chat_history: List[Dict[str, Any]]
+    ai_provider: AIProvider
+    api_key: str
+
+class AICandidateInfoRequest(BaseModel):
+    candidate_info: str
+    ai_provider: AIProvider
+    api_key: str
+
+class AICompanyResearchRequest(BaseModel):
+    company_url: str
+    ai_provider: AIProvider
+    api_key: str
 
 
 @app.post("/api/ai/estimate-chance")
-async def ai_estimate_chance(request: AiRequest):
-    """Endpoint for AI job chance estimation."""
-    if not request.job_description or not request.profile:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job description and profile are required.")
+async def estimate_job_chance_api(request: AIAssessmentRequest = Body(...)):
     try:
         result = await ai_service.estimate_job_chance(
-            job_description=request.job_description,
-            profile=request.profile,
-            ai_provider=request.ai_provider,
-            api_key=request.api_key
+            request.job_description, request.profile, request.ai_provider, request.api_key
         )
         return {"result": result}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/tune-cv")
-async def ai_tune_cv(request: AiRequest):
-    """Endpoint for AI CV tuning."""
-    if not request.job_description or not request.profile:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job description and profile are required.")
+async def tune_cv_api(request: AIAssessmentRequest = Body(...)):
     try:
         result = await ai_service.tune_cv(
-            job_description=request.job_description,
-            profile=request.profile,
-            ai_provider=request.ai_provider,
-            api_key=request.api_key
+            request.job_description, request.profile, request.ai_provider, request.api_key
         )
         return {"result": result}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/cover-letter")
-async def ai_generate_cover_letter(request: AiRequest):
-    """Endpoint for AI cover letter generation."""
-    if not request.job_description or not request.profile:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job description and profile are required.")
+async def generate_cover_letter_api(request: AIAssessmentRequest = Body(...)):
     try:
         result = await ai_service.generate_cover_letter(
-            job_description=request.job_description,
-            profile=request.profile,
-            ai_provider=request.ai_provider,
-            api_key=request.api_key
+            request.job_description, request.profile, request.ai_provider, request.api_key
         )
         return {"result": result}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/interview-qa")
-async def ai_interview_qa(request: AiRequest):
-    """Endpoint for AI interview Q&A chatbot."""
-    if not request.job_title or not request.profile or not request.chat_history:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Job title, profile, and chat history are required.")
+async def interview_qa_chat_api(request: AIRequestWithChatHistory = Body(...)):
     try:
-        response_text = await ai_service.interview_qa_chat(
-            job_title=request.job_title,
-            profile=request.profile,
-            chat_history=request.chat_history,
-            ai_provider=request.ai_provider,
-            api_key=request.api_key
+        response = await ai_service.interview_qa_chat(
+            request.job_title, request.profile, request.chat_history, request.ai_provider, request.api_key
         )
-        return {"response": response_text}
+        return {"response": response}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/skill-extractor")
-async def ai_extract_skills(request: AiRequest):
-    """Endpoint for AI job description skill extraction and analysis."""
-    if not request.job_description or not request.profile:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job description and profile are required.")
+async def extract_job_skills_api(request: AIAssessmentRequest = Body(...)):
     try:
         result = await ai_service.extract_job_skills(
-            job_description=request.job_description,
-            profile=request.profile,
-            ai_provider=request.ai_provider,
-            api_key=request.api_key
+            request.job_description, request.profile, request.ai_provider, request.api_key
         )
         return {"result": result}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/craft-interview-questions")
-async def ai_craft_interview_questions(request: AiRequest):
-    """Endpoint for AI crafting interview questions for a candidate."""
-    if not request.candidate_info:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Candidate information is required.")
+async def craft_interview_questions_api(request: AICandidateInfoRequest = Body(...)):
     try:
         result = await ai_service.craft_interview_questions(
-            candidate_info=request.candidate_info,
-            ai_provider=request.ai_provider,
-            api_key=request.api_key
+            request.candidate_info, request.ai_provider, request.api_key
         )
         return {"result": result}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/company-research")
-async def ai_company_research(request: AiRequest):
-    """Endpoint for AI company website research."""
-    if not request.company_url:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Company URL is required.")
+async def research_company_website_api(request: AICompanyResearchRequest = Body(...)):
     try:
         result = await ai_service.research_company_website(
-            company_url=request.company_url,
-            ai_provider=request.ai_provider,
-            api_key=request.api_key
+            request.company_url, request.ai_provider, request.api_key
         )
         return {"result": result}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/about-me-answer")
-async def ai_generate_about_me_answer(request: AiRequest):
-    """Endpoint for AI generating a tuned 'About Me' answer."""
-    if not request.job_description or not request.profile:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job description and profile are required.")
+async def generate_about_me_answer_api(request: AIAssessmentRequest = Body(...)):
     try:
         result = await ai_service.generate_about_me_answer(
-            job_description=request.job_description,
-            profile=request.profile,
-            ai_provider=request.ai_provider,
-            api_key=request.api_key
+            request.job_description, request.profile, request.ai_provider, request.api_key
         )
         return {"result": result}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/profile/fill-from-resume-ai")
-async def ai_fill_profile_from_resume(
-        resume_file: UploadFile = File(...),
-        ai_provider: AIProvider = Form(...),  # Use Form for these parameters
-        api_key: str = Form(...)  # Use Form for these parameters
+async def fill_profile_from_resume_ai(
+        resume_file: UploadFile = File(...), ai_provider: AIProvider = Form(...), api_key: str = Form(...)
 ):
-    """Endpoint for AI to fill profile from a resume PDF."""
-    if not resume_file:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Resume PDF file is required.")
-    if not api_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="AI API key is required.")
+    if not resume_file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported for resume upload.")
 
+    pdf_content = await resume_file.read()
     try:
-        pdf_content = await resume_file.read()
-        extracted_profile_data = await ai_service.extract_profile_from_resume_pdf(
-            pdf_content=pdf_content,
-            ai_provider=ai_provider,
-            api_key=api_key
-        )
+        # Pass raw bytes to the AI service
+        extracted_profile_data = await ai_service.extract_profile_from_resume_pdf(pdf_content, ai_provider, api_key)
 
-        # Update the user's profile in the database with extracted data
-        # First, fetch the current profile to merge (or create if none exists)
-        current_profile = await db.get_user_profile()
-        if not current_profile:
-            current_profile = UserProfile()
+        # Convert the dictionary to a UserProfile model for validation and consistency
+        extracted_profile = UserProfile(**extracted_profile_data)
 
-        # Merge extracted data into the current profile
-        # This will overwrite existing fields and append to lists
-        updated_profile_data = current_profile.dict(exclude_unset=True)  # Get current profile as dict
+        # Save the extracted profile to the database
+        saved_profile = await db.save_user_profile(extracted_profile)
 
-        # Merge top-level fields
-        for key, value in extracted_profile_data.items():
-            if key not in ['education', 'experience', 'skills', 'languages', 'certifications']:
-                if value is not None and value != "":
-                    updated_profile_data[key] = value
+        if not saved_profile:
+            raise HTTPException(status_code=500, detail="Failed to save extracted profile to database.")
 
-        # Merge lists (append new entries, avoid duplicates if possible, or replace for simplicity)
-        # For simplicity, we'll extend the lists. For more complex merging (e.g., avoiding exact duplicates),
-        # additional logic would be needed.
-        for list_field in ['education', 'experience', 'skills', 'languages', 'certifications']:
-            if extracted_profile_data.get(list_field):
-                # Convert list of Pydantic models to list of dicts for merging
-                existing_list = [item.dict() for item in getattr(current_profile, list_field)]
-                new_entries = extracted_profile_data[list_field]
-
-                # Simple append for now.
-                updated_list = existing_list + new_entries
-
-                # Deduplicate for skills, education, experience if needed (example for skills)
-                if list_field == 'skills':
-                    seen = set()
-                    deduplicated_list = []
-                    for item in updated_list:
-                        item_tuple = tuple(sorted(item.items()))  # Convert dict to sortable tuple for set
-                        if item_tuple not in seen:
-                            seen.add(item_tuple)
-                            deduplicated_list.append(item)
-                    updated_list = deduplicated_list
-                # Add similar deduplication logic for other lists if necessary
-
-                updated_profile_data[list_field] = updated_list
-
-        final_profile = UserProfile(**updated_profile_data)
-        saved_profile = await db.save_user_profile(final_profile)
-
-        return {"profile": saved_profile.dict()}
+        return {"message": "Profile extracted and filled successfully!", "profile": saved_profile}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"AI profile extraction failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI extraction failed: {e}")
+
 
 if __name__ == "__main__":
     import uvicorn

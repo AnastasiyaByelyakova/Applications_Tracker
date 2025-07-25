@@ -1,124 +1,8 @@
-// Global variables for applications module
-let applications = []; // Filtered applications for the main applications tab
-let allApplications = []; // All applications for dashboard calculations (used by dashboard.js)
-let currentSortColumnApplications = 'application_date';
-let currentSortDirectionApplications = 'desc';
-let currentFilterTextApplications = '';
-let currentViewApplications = 'cards';
+// Global array to store applications
+let applications = [];
 
 /**
- * Renders the list of job applications in either card or table view.
- */
-function renderApplications() {
-    const applicationListCards = document.getElementById('application-list-cards');
-    const applicationsTableBody = document.getElementById('applications-table-body');
-
-    applicationListCards.innerHTML = '';
-    applicationsTableBody.innerHTML = '';
-
-    let filteredApplications = applications.filter(app =>
-        app.job_title.toLowerCase().includes(currentFilterTextApplications.toLowerCase()) ||
-        app.company.toLowerCase().includes(currentFilterTextApplications.toLowerCase()) ||
-        app.status.toLowerCase().includes(currentFilterTextApplications.toLowerCase())
-    );
-
-    // Sort applications
-    filteredApplications.sort((a, b) => {
-        let valA = a[currentSortColumnApplications];
-        let valB = b[currentSortColumnApplications];
-
-        // Handle date sorting
-        if (currentSortColumnApplications === 'application_date') {
-            valA = new Date(valA);
-            valB = new Date(valB);
-        }
-
-        if (valA < valB) return currentSortDirectionApplications === 'asc' ? -1 : 1;
-        if (valA > valB) return currentSortDirectionApplications === 'asc' ? 1 : -1;
-        return 0;
-    });
-
-    filteredApplications.forEach(app => {
-        // Render card view
-        const card = document.createElement('div');
-        card.className = 'application-card';
-        card.innerHTML = `
-            <h4>${app.job_title} at ${app.company}</h4>
-            <p><strong>Status:</strong> <span class="status-badge status-${app.status.toLowerCase()}">${app.status}</span></p>
-            <p><strong>Applied On:</strong> ${new Date(app.application_date).toLocaleDateString()}</p>
-            <div class="card-actions">
-                <button class="btn btn-info btn-sm" onclick="viewApplication('${app.id}')">View Details</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteApplication('${app.id}')">Delete</button>
-            </div>
-        `;
-        applicationListCards.appendChild(card);
-
-        // Render table row view
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${app.job_title}</td>
-            <td>${app.company}</td>
-            <td>${new Date(app.application_date).toLocaleDateString()}</td>
-            <td>
-                <select onchange="updateApplicationStatus('${app.id}', this.value)" class="status-select status-${app.status.toLowerCase()}">
-                    <option value="Applied" ${app.status === 'Applied' ? 'selected' : ''}>Applied</option>
-                    <option value="Interview" ${app.status === 'Interview' ? 'selected' : ''}>Interview</option>
-                    <option value="Rejection" ${app.status === 'Rejection' ? 'selected' : ''}>Rejection</option>
-                    <option value="Offer" ${app.status === 'Offer' ? 'selected' : ''}>Offer</option>
-                </select>
-            </td>
-            <td>
-                <button class="btn btn-info btn-sm" onclick="viewApplication('${app.id}')">View</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteApplication('${app.id}')">Delete</button>
-            </div>
-        `;
-        applicationsTableBody.appendChild(row);
-    });
-
-    toggleApplicationView(); // Apply the current view setting
-}
-
-/**
- * Filters and re-renders applications based on the search input.
- */
-function filterAndRenderApplications() {
-    currentFilterTextApplications = document.getElementById('filter-applications').value;
-    renderApplications();
-}
-
-/**
- * Sorts the applications table by a given column.
- * @param {string} column The column to sort by.
- */
-function sortTableApplications(column) {
-    if (currentSortColumnApplications === column) {
-        currentSortDirectionApplications = currentSortDirectionApplications === 'asc' ? 'desc' : 'asc';
-    } else {
-        currentSortColumnApplications = column;
-        currentSortDirectionApplications = 'asc';
-    }
-    renderApplications();
-}
-
-/**
- * Toggles between card and table view for applications.
- */
-function toggleApplicationView() {
-    currentViewApplications = document.getElementById('view-toggle').value;
-    const cardsView = document.getElementById('application-list-cards');
-    const tableView = document.getElementById('application-list-table');
-
-    if (currentViewApplications === 'cards') {
-        cardsView.style.display = 'grid';
-        tableView.style.display = 'none';
-    } else {
-        cardsView.style.display = 'none';
-        tableView.style.display = 'block';
-    }
-}
-
-/**
- * Loads job applications from the backend API.
+ * Fetches applications from the backend and renders them.
  */
 async function loadApplications() {
     try {
@@ -135,226 +19,409 @@ async function loadApplications() {
 }
 
 /**
- * Adds a new job application or updates an existing one.
- * @param {Event} event The form submission event.
+ * Renders applications based on the current view mode (cards or table).
  */
-async function addApplication(event) {
-    event.preventDefault();
+function renderApplications() {
+    const viewToggle = document.getElementById('view-toggle');
+    const cardsView = document.getElementById('application-list-cards');
+    const tableView = document.getElementById('application-list-table');
 
-    const jobTitle = document.getElementById('job-title').value;
-    const company = document.getElementById('company').value;
-    const description = document.getElementById('description').value;
-    const link = document.getElementById('link').value;
-    const applicationDate = document.getElementById('application-date').value;
-    const status = document.getElementById('status').value;
-    const cvFile = document.getElementById('cv-file').files[0];
-    const coverLetter = document.getElementById('cover-letter').value;
-
-    let cvFilePath = null;
-    if (cvFile) {
-        const formData = new FormData();
-        formData.append('file', cvFile);
-        try {
-            const uploadResponse = await fetch('/api/upload-cv', {
-                method: 'POST',
-                body: formData
-            });
-            if (!uploadResponse.ok) {
-                throw new Error('Failed to upload CV file.');
-            }
-            const uploadResult = await uploadResponse.json();
-            cvFilePath = uploadResult.path;
-        } catch (error) {
-            console.error('Error uploading CV:', error);
-            showAlert('Failed to upload CV. Please try again.', 'error');
-            return; // Stop the process if CV upload fails
-        }
-    }
-
-    const newApplication = {
-        job_title: jobTitle,
-        company: company,
-        description: description,
-        link: link,
-        application_date: applicationDate || new Date().toISOString().split('T')[0], // Set default if empty
-        status: status,
-        cv_file: cvFilePath,
-        cover_letter: coverLetter
-    };
-
-    try {
-        const response = await fetch('/api/applications', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(newApplication)
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const addedApp = await response.json();
-        applications.push(addedApp);
-        renderApplications();
-        document.getElementById('application-form').reset();
-        hideAddApplicationForm();
-        showAlert('Application added successfully!', 'success');
-    } catch (error) {
-        console.error('Error adding application:', error);
-        showAlert('Failed to add application. Please try again.', 'error');
+    if (viewToggle.value === 'cards') {
+        cardsView.style.display = 'grid';
+        tableView.style.display = 'none';
+        renderApplicationCards(applications);
+    } else {
+        cardsView.style.display = 'none';
+        tableView.style.display = 'block';
+        renderApplicationTable(applications);
     }
 }
 
 /**
- * Updates the status of an existing application.
- * @param {string} id The ID of the application to update.
- * @param {string} newStatus The new status.
+ * Renders applications as cards.
+ * @param {Array<object>} apps The array of application objects.
  */
-async function updateApplicationStatus(id, newStatus) {
-    const appIndex = applications.findIndex(app => app.id === id);
-    if (appIndex > -1) {
-        const appToUpdate = { ...applications[appIndex], status: newStatus };
-        try {
-            const response = await fetch(`/api/applications/${id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(appToUpdate)
-            });
+function renderApplicationCards(apps) {
+    const container = document.getElementById('application-list-cards');
+    container.innerHTML = ''; // Clear existing cards
 
+    if (apps.length === 0) {
+        container.innerHTML = '<p class="text-center">No applications found. Add a new one!</p>';
+        return;
+    }
+
+    apps.forEach(app => {
+        const appDate = new Date(app.application_date).toLocaleDateString();
+        const card = document.createElement('div');
+        card.classList.add('application-card');
+        card.innerHTML = `
+            <h4>${app.job_title} at ${app.company}</h4>
+            <p>Status: <span class="status-badge status-${app.status.toLowerCase()}">${app.status}</span></p>
+            <p>Applied On: ${appDate}</p>
+            <div class="card-actions">
+                <button class="btn btn-info btn-sm" onclick="showApplicationDetailModal('${app.id}')">View Details</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteApplication('${app.id}')">Delete</button>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+/**
+ * Renders applications as a table.
+ * @param {Array<object>} apps The array of application objects.
+ */
+function renderApplicationTable(apps) {
+    const tbody = document.getElementById('applications-table-body');
+    tbody.innerHTML = ''; // Clear existing rows
+
+    if (apps.length === 0) {
+        const table = document.getElementById('application-list-table');
+        table.style.display = 'block'; // Ensure table is visible to show message
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center">No applications found. Add a new one!</td></tr>';
+        return;
+    }
+
+    apps.forEach(app => {
+        const appDate = new Date(app.application_date).toLocaleDateString();
+        const row = tbody.insertRow();
+        row.innerHTML = `
+            <td>${app.job_title}</td>
+            <td>${app.company}</td>
+            <td>${appDate}</td>
+            <td>
+                <select class="status-select status-${app.status.toLowerCase()}" onchange="updateApplicationStatus('${app.id}', this.value)">
+                    <option value="Applied" ${app.status === 'Applied' ? 'selected' : ''}>Applied</option>
+                    <option value="Interview" ${app.status === 'Interview' ? 'selected' : ''}>Interview</option>
+                    <option value="Rejection" ${app.status === 'Rejection' ? 'selected' : ''}>Rejection</option>
+                    <option value="Offer" ${app.status === 'Offer' ? 'selected' : ''}>Offer</option>
+                </select>
+            </td>
+            <td>
+                <button class="btn btn-info btn-sm" onclick="showApplicationDetailModal('${app.id}')">View</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteApplication('${app.id}')">Delete</button>
+            </td>
+        `;
+    });
+}
+
+/**
+ * Shows the add/edit application form modal.
+ * @param {string} [appId=null] The ID of the application to edit, or null for a new application.
+ */
+async function showApplicationForm(appId = null) {
+    const formSection = document.getElementById('add-application-form');
+    const form = document.getElementById('application-form');
+    form.reset(); // Clear previous form data
+    document.getElementById('application-id').value = ''; // Clear hidden ID field
+
+    if (appId) {
+        // Editing existing application
+        try {
+            const response = await fetch(`/api/applications/${appId}`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
-            const updatedApp = await response.json();
-            applications[appIndex] = updatedApp;
-            renderApplications(); // Re-render to update status badge/style
-            showAlert('Application status updated successfully!', 'success');
+            const app = await response.json();
+            document.getElementById('application-id').value = app.id; // Set hidden ID
+            document.getElementById('job-title').value = app.job_title;
+            document.getElementById('company').value = app.company;
+            document.getElementById('link').value = app.link;
+            document.getElementById('application-date').value = app.application_date.split('T')[0]; // Format date
+            document.getElementById('status').value = app.status;
+            document.getElementById('description').value = app.description;
+            // CV file name display (actual file input remains empty for security)
+            // document.getElementById('cv-file-name').textContent = app.cv_file ? app.cv_file.split('/').pop() : 'No file uploaded';
+            document.getElementById('cover-letter').value = app.cover_letter;
+            formSection.querySelector('h3').textContent = 'Edit Application';
         } catch (error) {
-            console.error('Error updating application status:', error);
-            showAlert('Failed to update application status. Please try again.', 'error');
+            console.error('Error fetching application for edit:', error);
+            showAlert('Failed to load application for editing.', 'error');
+            return;
         }
+    } else {
+        // Adding new application
+        formSection.querySelector('h3').textContent = 'Add New Application';
+        // Set default application date to today
+        document.getElementById('application-date').value = new Date().toISOString().split('T')[0];
+    }
+    formSection.style.display = 'block';
+    document.getElementById('add-app-btn').style.display = 'none'; // Hide add button when form is open
+}
+
+/**
+ * Hides the add/edit application form.
+ */
+function hideApplicationForm() {
+    document.getElementById('add-application-form').style.display = 'none';
+    document.getElementById('add-app-btn').style.display = 'block'; // Show add button
+}
+
+/**
+ * Handles saving a new or updating an existing application.
+ */
+async function saveApplication() {
+    const appId = document.getElementById('application-id').value;
+    const jobTitle = document.getElementById('job-title').value;
+    const company = document.getElementById('company').value;
+    const link = document.getElementById('link').value;
+    const applicationDate = document.getElementById('application-date').value;
+    const status = document.getElementById('status').value;
+    const description = document.getElementById('description').value;
+    const cvFile = document.getElementById('cv-file').files[0];
+    const coverLetter = document.getElementById('cover-letter').value;
+
+    if (!jobTitle || !company) {
+        showAlert('Job Title and Company are required.', 'warning');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('job_title', jobTitle);
+    formData.append('company', company);
+    formData.append('link', link);
+    formData.append('application_date', applicationDate);
+    formData.append('status', status);
+    formData.append('description', description);
+    formData.append('cover_letter', coverLetter);
+    if (cvFile) {
+        formData.append('cv_file', cvFile);
+    }
+
+    try {
+        let response;
+        if (appId) {
+            // Update existing application
+            response = await fetch(`/api/applications/${appId}`, {
+                method: 'PUT',
+                body: formData
+            });
+        } else {
+            // Add new application
+            response = await fetch('/api/applications', {
+                method: 'POST',
+                body: formData
+            });
+        }
+
+        if (response.ok) {
+            showAlert('Application saved successfully!', 'success');
+            hideApplicationForm();
+            loadApplications(); // Reload applications list
+            loadDashboardData(); // Update dashboard charts
+        } else {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to save application.');
+        }
+    } catch (error) {
+        console.error('Error saving application:', error);
+        showAlert('Error saving application: ' + error.message, 'error');
     }
 }
 
 /**
- * Deletes a job application after confirmation.
- * @param {string} id The ID of the application to delete.
+ * Deletes an application after confirmation.
+ * @param {string} appId The ID of the application to delete.
  */
-async function deleteApplication(id) {
+function deleteApplication(appId) {
     showConfirm('Are you sure you want to delete this application?', async () => {
         try {
-            const response = await fetch(`/api/applications/${id}`, {
+            const response = await fetch(`/api/applications/${appId}`, {
                 method: 'DELETE'
             });
 
-            if (!response.ok) {
-                let errorMessage = `HTTP error! status: ${response.status}`;
-                try {
-                    const errorData = await response.json();
-                    errorMessage = errorData.detail || errorMessage;
-                } catch (parseError) {
-                    errorMessage = await response.text() || errorMessage;
-                }
-                throw new Error(errorMessage);
+            if (response.ok) {
+                showAlert('Application deleted successfully!', 'success');
+                loadApplications(); // Reload applications list
+                loadDashboardData(); // Update dashboard charts
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to delete application.');
             }
-
-            applications = applications.filter(app => String(app.id) !== String(id));
-            showAlert('Application deleted successfully!', 'success');
-            renderApplications();
         } catch (error) {
             console.error('Error deleting application:', error);
-            showAlert('Failed to delete application: ' + error.message, 'error');
+            showAlert('Error deleting application: ' + error.message, 'error');
         }
     });
 }
 
 /**
- * Displays application details in a modal.
- * @param {string} id The ID of the application to view.
+ * Updates the status of an application directly from the table view.
+ * @param {string} appId The ID of the application to update.
+ * @param {string} newStatus The new status.
  */
-function viewApplication(id) {
-    const app = applications.find(a => a.id === id);
-    if (app) {
-        document.getElementById('modal-job-title').textContent = app.job_title;
-        document.getElementById('modal-company').textContent = app.company;
-        document.getElementById('modal-status').textContent = app.status;
-        document.getElementById('modal-status').className = `status-badge status-${app.status.toLowerCase()}`;
-        document.getElementById('modal-application-date').textContent = new Date(app.application_date).toLocaleDateString();
-        document.getElementById('modal-description').textContent = app.description;
+async function updateApplicationStatus(appId, newStatus) {
+    const appToUpdate = applications.find(app => app.id === appId);
+    if (!appToUpdate) {
+        showAlert('Application not found for status update.', 'error');
+        return;
+    }
 
-        const modalLink = document.getElementById('modal-link');
-        if (app.link) {
-            modalLink.href = app.link;
-            modalLink.style.display = 'inline';
+    // Create a copy and update only the status
+    const updatedAppData = { ...appToUpdate, status: newStatus };
+
+    // Remove ID and last_updated as they are not part of the Pydantic model for PUT
+    delete updatedAppData.id;
+    delete updatedAppData.last_updated;
+
+    try {
+        const response = await fetch(`/api/applications/${appId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedAppData)
+        });
+
+        if (response.ok) {
+            showAlert('Application status updated!', 'success');
+            loadApplications(); // Reload to reflect changes and update dashboard
+            loadDashboardData();
         } else {
-            modalLink.style.display = 'none';
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to update application status.');
         }
-
-        const modalCvFileName = document.getElementById('modal-cv-file-name');
-        const modalCvFileLink = document.getElementById('modal-cv-file-link');
-        if (app.cv_file) {
-            modalCvFileName.textContent = app.cv_file.split('/').pop(); // Display just the file name
-            modalCvFileLink.href = app.cv_file;
-            modalCvFileLink.style.display = 'inline';
-        } else {
-            modalCvFileName.textContent = 'No CV uploaded';
-            modalCvFileLink.style.display = 'none';
-        }
-
-        document.getElementById('modal-cover-letter').textContent = app.cover_letter || 'No cover letter provided.';
-
-        document.getElementById('application-detail-modal').classList.add('active'); // Show the modal
+    } catch (error) {
+        console.error('Error updating application status:', error);
+        showAlert('Error updating status: ' + error.message, 'error');
     }
 }
 
+
 /**
- * Closes the application detail modal.
+ * Shows the application detail modal.
+ * @param {string} appId The ID of the application to display.
+ */
+async function showApplicationDetailModal(appId) {
+    const modal = document.getElementById('application-detail-modal');
+    const app = applications.find(a => a.id === appId);
+
+    if (!app) {
+        showAlert('Application details not found!', 'error');
+        return;
+    }
+
+    document.getElementById('modal-job-title').textContent = app.job_title;
+    document.getElementById('modal-company').textContent = app.company;
+
+    const statusBadge = document.getElementById('modal-status');
+    statusBadge.textContent = app.status;
+    statusBadge.className = `status-badge status-${app.status.toLowerCase()}`; // Update class for styling
+
+    document.getElementById('modal-application-date').textContent = new Date(app.application_date).toLocaleDateString();
+    document.getElementById('modal-description').textContent = app.description || 'N/A';
+
+    const linkElement = document.getElementById('modal-link');
+    if (app.link) {
+        linkElement.href = app.link;
+        linkElement.style.display = 'inline';
+    } else {
+        linkElement.style.display = 'none';
+    }
+
+    const cvFileNameSpan = document.getElementById('modal-cv-file-name');
+    const cvFileLink = document.getElementById('modal-cv-file-link');
+    if (app.cv_file) {
+        const filename = app.cv_file.split('/').pop();
+        cvFileNameSpan.textContent = filename;
+        cvFileLink.href = `/uploads/${filename}`; // Assuming files are served from /uploads
+        cvFileLink.style.display = 'inline';
+    } else {
+        cvFileNameSpan.textContent = 'No CV uploaded';
+        cvFileLink.style.display = 'none';
+    }
+    document.getElementById('modal-cover-letter').textContent = app.cover_letter || 'No notes.';
+
+    modal.classList.add('active');
+}
+
+/**
+ * Hides the application detail modal.
  */
 function closeApplicationDetailModal() {
     document.getElementById('application-detail-modal').classList.remove('active');
 }
 
 /**
- * Shows the add/edit application form.
+ * Filters applications based on search input.
  */
-function showAddApplicationForm() {
-    document.getElementById('add-application-form').style.display = 'block';
-    document.getElementById('add-app-btn').style.display = 'none';
-    // Set default application date to today
-    document.getElementById('application-date').value = new Date().toISOString().split('T')[0];
+function filterApplications() {
+    const filterText = document.getElementById('filter-applications').value.toLowerCase();
+    const filteredApps = applications.filter(app =>
+        app.job_title.toLowerCase().includes(filterText) ||
+        app.company.toLowerCase().includes(filterText) ||
+        app.status.toLowerCase().includes(filterText)
+    );
+    renderApplicationsBasedOnCurrentView(filteredApps); // Render filtered apps based on current view
 }
 
 /**
- * Hides the add/edit application form and resets it.
+ * Helper to render applications based on the currently selected view (cards/table).
+ * @param {Array<object>} apps The array of application objects to render.
  */
-function hideAddApplicationForm() {
-    document.getElementById('add-application-form').style.display = 'none';
-    document.getElementById('add-app-btn').style.display = 'block';
-    document.getElementById('application-form').reset(); // Clear form fields
+function renderApplicationsBasedOnCurrentView(apps) {
+    const viewToggle = document.getElementById('view-toggle');
+    if (viewToggle.value === 'cards') {
+        renderApplicationCards(apps);
+    } else {
+        renderApplicationTable(apps);
+    }
 }
+
 
 /**
- * Handles CV file selection (for logging purposes, can be extended).
- * @param {Event} event The file input change event.
+ * Sorts the applications table.
+ * @param {string} column The column to sort by.
  */
-function handleCvFileUpload(event) {
-    const fileName = event.target.files[0] ? event.target.files[0].name : 'No file chosen';
-    console.log('CV File selected:', fileName);
+let currentAppSortColumn = '';
+let currentAppSortDirection = 'asc'; // 'asc' or 'desc'
+
+function sortTableApplications(column) {
+    if (currentAppSortColumn === column) {
+        currentAppSortDirection = (currentAppSortDirection === 'asc') ? 'desc' : 'asc';
+    } else {
+        currentAppSortColumn = column;
+        currentAppSortDirection = 'asc';
+    }
+
+    applications.sort((a, b) => {
+        let valA = a[column];
+        let valB = b[column];
+
+        // Handle date comparisons
+        if (column.includes('date')) {
+            valA = new Date(valA);
+            valB = new Date(valB);
+        }
+
+        if (valA < valB) {
+            return currentAppSortDirection === 'asc' ? -1 : 1;
+        }
+        if (valA > valB) {
+            return currentAppSortDirection === 'asc' ? 1 : -1;
+        }
+        return 0;
+    });
+
+    renderApplicationsBasedOnCurrentView(applications); // Re-render with sorted data
 }
 
-// Expose functions to the global scope for HTML event handlers
+
+// --- Event Listeners ---
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('add-app-btn')?.addEventListener('click', () => showApplicationForm());
+    document.getElementById('cancel-app-btn')?.addEventListener('click', hideApplicationForm);
+    document.getElementById('application-form')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        await saveApplication();
+    });
+    document.getElementById('filter-applications')?.addEventListener('input', filterApplications);
+    document.getElementById('view-toggle')?.addEventListener('change', renderApplications); // Re-render on view change
+});
+
+// Expose functions to the global scope for app.js and HTML
+window.loadApplications = loadApplications;
+window.showApplicationForm = showApplicationForm;
 window.deleteApplication = deleteApplication;
-window.viewApplication = viewApplication;
-window.sortTableApplications = sortTableApplications;
 window.updateApplicationStatus = updateApplicationStatus;
+window.showApplicationDetailModal = showApplicationDetailModal;
 window.closeApplicationDetailModal = closeApplicationDetailModal;
-window.showAddApplicationForm = showAddApplicationForm;
-window.hideAddApplicationForm = hideAddApplicationForm;
-window.addApplication = addApplication;
-window.filterAndRenderApplications = filterAndRenderApplications;
-window.toggleApplicationView = toggleApplicationView;
-window.handleCvFileUpload = handleCvFileUpload;
+window.sortTableApplications = sortTableApplications;

@@ -6,6 +6,8 @@
     <title>Job Application Monitor</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Include chartjs-plugin-datalabels for displaying numbers on charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -16,7 +18,7 @@
             <div class="nav-tab active" data-tab="applications">Applications</div>
             <div class="nav-tab" data-tab="profile">Profile</div>
 
-            <!-- AI Tools Dropdown -->
+            <!-- AI Tools Dropdown - REMOVED data-tab attribute to prevent conflict with general tab logic -->
             <div class="nav-tab dropdown" id="ai-tools-dropdown">
                 AI Tools <span class="dropdown-arrow">&#9660;</span>
                 <div class="dropdown-content">
@@ -44,6 +46,7 @@
             <div id="add-application-form" class="form-section" style="display: none;">
                 <h3>Add/Edit Application</h3>
                 <form id="application-form">
+                    <input type="hidden" id="application-id"> <!-- Added hidden input for application ID -->
                     <div class="form-group">
                         <label for="job-title">Job Title</label>
                         <input type="text" id="job-title" required>
@@ -525,6 +528,16 @@
                     <h4>Interview Types</h4>
                     <canvas id="interviewTypeChart" class="chart-canvas"></canvas>
                 </div>
+                <!-- New chart for Skills by Level -->
+                <div class="chart-container">
+                    <h4>Skills by Level</h4>
+                    <canvas id="skillsLevelChart" class="chart-canvas"></canvas>
+                </div>
+                <!-- New chart for Applications by Job Title -->
+                <div class="chart-container">
+                    <h4>Applications by Job Title</h4>
+                    <canvas id="applicationsByJobTitleChart" class="chart-canvas"></canvas>
+                </div>
             </div>
         </div>
 
@@ -624,12 +637,13 @@
     </div>
 
     <!-- Script imports for modularized JavaScript -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> <!-- Added Marked.js -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="/static/js/utils.js"></script>
     <script src="/static/js/applications.js"></script>
     <script src="/static/js/profile.js"></script>
     <script src="/static/js/calendar.js"></script>
     <script src="/static/js/dashboard.js"></script>
+    <!-- IMPORTANT: ai_services_frontend.js must be loaded BEFORE app.js -->
     <script src="/static/js/ai_services_frontend.js"></script>
     <script src="/static/js/app.js"></script>
 </body>

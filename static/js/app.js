@@ -1,174 +1,219 @@
-// Global variables for main app logic
-// These are defined here for direct access by global functions,
-// but module-specific variables are now within their own files.
-let globalConfirmModal;
-let globalConfirmMessage;
-let globalConfirmYesBtn;
-let globalConfirmNoBtn;
+// Global variable to store the currently loaded user profile
+window.profile = null;
 
-// Initialize the app when the DOM is fully loaded
-document.addEventListener('DOMContentLoaded', function() {
-    // Get references to global confirm modal elements
-    globalConfirmModal = document.getElementById('global-confirm-modal');
-    globalConfirmMessage = document.getElementById('global-confirm-message');
-    globalConfirmYesBtn = document.getElementById('global-confirm-yes');
-    globalConfirmNoBtn = document.getElementById('global-confirm-no');
+// Global variables for the confirmation modal, initialized on DOMContentLoaded
+// These are exposed to the window scope so utils.js can access them.
+window.globalConfirmModal = null;
+window.globalConfirmMessage = null;
+window.globalConfirmYesBtn = null;
+window.globalConfirmNoBtn = null;
 
-    initializeEventListeners();
-    // Load initial data for the default active tab (Applications)
-    loadApplications();
-    loadProfile();
-    // Show the applications tab by default
-    showTab('applications', document.querySelector('.nav-tab[data-tab="applications"]'));
+document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize global confirmation modal elements
+    window.globalConfirmModal = document.getElementById('global-confirm-modal');
+    window.globalConfirmMessage = document.getElementById('global-confirm-message');
+    window.globalConfirmYesBtn = document.getElementById('global-confirm-yes');
+    window.globalConfirmNoBtn = document.getElementById('global-confirm-no');
 
-    // Explicitly hide all AI tool loading and result divs on page load
-    // This is handled by ai_services_frontend.js's showAiServicePage now,
-    // but ensures initial state is clean.
-    document.getElementById('chance-loading').style.display = 'none';
-    document.getElementById('chance-result').style.display = 'none';
-    document.getElementById('cv-loading').style.display = 'none';
-    document.getElementById('cv-result').style.display = 'none';
-    document.getElementById('cover-letter-loading').style.display = 'none';
-    document.getElementById('cover-letter-result').style.display = 'none';
-    document.getElementById('qa-loading').style.display = 'none';
-    document.getElementById('skill-extractor-loading').style.display = 'none';
-    document.getElementById('skill-extractor-result').style.display = 'none';
-    document.getElementById('craft-questions-loading').style.display = 'none';
-    document.getElementById('craft-questions-result').style.display = 'none';
-    document.getElementById('company-research-loading').style.display = 'none';
-    document.getElementById('company-research-result').style.display = 'none';
-    document.getElementById('about-me-loading').style.display = 'none';
-    document.getElementById('about-me-result').style.display = 'none';
-    document.getElementById('fill-profile-loading').style.display = 'none';
-    document.getElementById('fill-profile-result').style.display = 'none';
-});
+    // Get all nav tabs once and convert to an array for stable iteration
+    const allNavTabs = Array.from(document.querySelectorAll('.nav-tab'));
+    console.log('DEBUG: DOMContentLoaded - allNavTabs initialized:', allNavTabs);
 
-/**
- * Initializes all core event listeners for tab navigation and AI service selection.
- */
-function initializeEventListeners() {
-    // Tab navigation
-    document.querySelectorAll('.nav-tabs .nav-tab').forEach(tab => {
-        // Exclude the dropdown itself from direct tab switching
-        if (!tab.classList.contains('dropdown')) {
-            tab.addEventListener('click', function() {
-                const tabName = this.getAttribute('data-tab');
-                showTab(tabName, this);
-                if (tabName === 'calendar') {
-                    loadInterviews(); // Load interviews when calendar tab is shown
-                } else if (tabName === 'dashboard') {
-                    // Set dashboard month selector to current month by default
-                    const year = currentDashboardDate.getFullYear();
-                    const month = (currentDashboardDate.getMonth() + 1).toString().padStart(2, '0');
-                    document.getElementById('dashboard-month-select').value = `${year}-${month}`;
-                    loadDashboardData(); // Load data for dashboard when tab is shown
+    // Tab Navigation
+    allNavTabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            const tabId = this.dataset.tab; // Get data-tab attribute
+
+            // IMPORTANT: Only proceed with general tab logic if the clicked element has a data-tab.
+            // This correctly excludes the AI Tools dropdown itself, which now lacks data-tab.
+            if (!tabId) {
+                console.log('DEBUG: Clicked element has no data-tab. Skipping general tab logic for:', this);
+                // The dedicated aiToolsDropdown listener (further down) will handle toggling its active state.
+                return; // Exit this handler if it's not a content-switching tab
+            }
+
+            console.log('DEBUG: Regular Tab clicked (with data-tab):', this);
+
+            // Remove 'active' from all tabs and hide all tab contents
+            for (const t of allNavTabs) {
+                if (t && t.classList) {
+                    t.classList.remove('active');
+                } else {
+                    console.error('ERROR: Encountered invalid nav tab element during deactivation:', t);
+                }
+            }
+            document.querySelectorAll('.tab-content').forEach(content => {
+                if (content && content.classList) {
+                    content.classList.remove('active');
+                } else {
+                    console.error('ERROR: Encountered invalid tab content element during deactivation:', content);
                 }
             });
-        }
+
+            // Add 'active' to the clicked tab
+            this.classList.add('active');
+
+            // Show the corresponding tab content
+            const targetTabContent = document.getElementById(tabId);
+            if (targetTabContent && targetTabContent.classList) {
+                targetTabContent.classList.add('active');
+            } else {
+                console.error('ERROR: Target tab content not found or invalid:', tabId, targetTabContent);
+            }
+
+            // Specific actions when switching tabs
+            if (tabId === 'dashboard') {
+                loadDashboardData();
+            } else if (tabId === 'calendar') {
+                renderCalendar();
+                loadMonthlyInterviews();
+            } else if (tabId === 'applications') {
+                loadApplications();
+            } else if (tabId === 'profile') {
+                loadProfile();
+            }
+            // Hide all AI service sub-pages when switching away from AI Tools,
+            // or ensure only the intro message is shown if AI Tools is selected.
+            if (tabId !== 'ai-tools') {
+                document.querySelectorAll('.ai-service-page').forEach(page => page.style.display = 'none');
+                document.getElementById('ai-tools-intro-message').style.display = 'block';
+            }
+        });
     });
 
-    // AI Tools Dropdown Toggle
+    // AI Tools Dropdown functionality
     const aiToolsDropdown = document.getElementById('ai-tools-dropdown');
-    aiToolsDropdown.addEventListener('click', function(event) {
-        // Toggle 'active' class on the dropdown itself to show/hide content
-        this.classList.toggle('active');
-        // Prevent immediate closing if clicking inside the dropdown content
-        event.stopPropagation();
-    });
+    if (aiToolsDropdown) {
+        aiToolsDropdown.addEventListener('click', function(event) {
+            console.log('DEBUG: AI Tools Dropdown element click listener triggered.');
+            this.classList.toggle('active'); // Toggle dropdown visibility
+            event.stopPropagation(); // Prevent document click from closing it immediately
+        });
+    } else {
+        console.error('ERROR: AI Tools Dropdown element not found.');
+    }
 
-    // Hide dropdown if clicked outside
-    window.addEventListener('click', function(event) {
-        if (!aiToolsDropdown.contains(event.target)) {
+    // Close dropdown if clicked outside
+    document.addEventListener('click', function(event) {
+        if (aiToolsDropdown && aiToolsDropdown.classList && !aiToolsDropdown.contains(event.target)) {
             aiToolsDropdown.classList.remove('active');
         }
     });
 
-    // AI Service Link Clicks within Dropdown
+    // Handle clicks on AI service links within the dropdown
     document.querySelectorAll('.dropdown-content a').forEach(link => {
         link.addEventListener('click', function(event) {
-            event.preventDefault(); // Prevent default link behavior
-            const serviceId = this.getAttribute('data-ai-service');
-            showTab('ai-tools', document.getElementById('ai-tools-dropdown')); // Activate AI Tools tab
-            showAiServicePage(serviceId); // Show the specific AI service page
-            aiToolsDropdown.classList.remove('active'); // Hide the dropdown after selection
+            event.preventDefault();
+            const serviceId = this.dataset.aiService;
+            // Explicitly call through window object
+            if (typeof window.showAiServicePage === 'function') {
+                window.showAiServicePage(serviceId);
+            } else {
+                console.error('ERROR: window.showAiServicePage is not defined.');
+                showAlert('An internal error occurred: AI service display function not found.', 'error');
+                return;
+            }
+
+            // Also switch to the AI Tools tab if not already there
+            if (allNavTabs.length > 0) {
+                for (const t of allNavTabs) {
+                    if (t && t.classList) {
+                        t.classList.remove('active');
+                    } else {
+                        console.error('ERROR: Encountered invalid nav tab element in dropdown click handler:', t);
+                    }
+                }
+            }
+            document.querySelectorAll('.tab-content').forEach(content => {
+                if (content && content.classList) {
+                    content.classList.remove('active');
+                } else {
+                    console.error('ERROR: Encountered invalid tab content element in dropdown click handler:', content);
+                }
+            });
+            const aiToolsTab = document.querySelector('.nav-tab[data-tab="ai-tools"]');
+            if (aiToolsTab && aiToolsTab.classList) {
+                aiToolsTab.classList.add('active');
+            } else {
+                console.error('ERROR: AI Tools tab element not found or invalid:', aiToolsTab);
+            }
+            const aiToolsContent = document.getElementById('ai-tools');
+            if (aiToolsContent && aiToolsContent.classList) {
+                aiToolsContent.classList.add('active');
+            } else {
+                console.error('ERROR: AI Tools content element not found or invalid:', aiToolsContent);
+            }
+            if (aiToolsDropdown && aiToolsDropdown.classList) {
+                aiToolsDropdown.classList.remove('active'); // Close dropdown after selection
+            }
         });
     });
 
+    // Initial load of applications when the page loads
+    await loadApplications();
+    await loadProfile(); // Load profile data on startup
+    await loadDashboardData(); // Load dashboard data on startup
+    renderCalendar(); // Render calendar on startup
+    loadMonthlyInterviews(); // Load interviews for the current month on startup
 
-    // Application form events (delegated to applications.js)
-    document.getElementById('add-app-btn').addEventListener('click', showAddApplicationForm);
-    document.getElementById('cancel-app-btn').addEventListener('click', hideAddApplicationForm);
-    document.getElementById('application-form').addEventListener('submit', addApplication);
-    document.getElementById('filter-applications').addEventListener('input', filterAndRenderApplications);
-    document.getElementById('view-toggle').addEventListener('change', toggleApplicationView);
-    document.getElementById('cv-file').addEventListener('change', handleCvFileUpload);
-
-
-    // Profile form events (delegated to profile.js)
-    document.getElementById('profile-form').addEventListener('submit', saveProfile);
-    document.getElementById('add-education-btn').addEventListener('click', addEducationField);
-    document.getElementById('add-experience-btn').addEventListener('click', addExperienceField);
-    document.getElementById('add-skill-btn').addEventListener('click', addSkillField);
-    document.getElementById('add-language-btn').addEventListener('click', addLanguageField);
-    document.getElementById('add-certification-btn').addEventListener('click', addCertificationField);
-    document.getElementById('profile-cv-file').addEventListener('change', handleProfileCvUpload);
-
-
-    // AI Tools event listeners (delegated to ai_services_frontend.js)
-    document.getElementById('estimate-chance-btn').addEventListener('click', estimateJobChance);
-    document.getElementById('tune-cv-btn').addEventListener('click', tuneCv);
-    document.getElementById('generate-cover-letter-btn').addEventListener('click', generateCoverLetter); // New
-    document.getElementById('qa-chat-send-btn').addEventListener('click', sendInterviewQaMessage); // New
-    document.getElementById('qa-chat-input').addEventListener('keypress', function(event) { // New: Enter key for chat
-        if (event.key === 'Enter') {
+    // Event Listeners for AI Service Buttons
+    document.getElementById('estimate-chance-btn')?.addEventListener('click', estimateJobChance);
+    document.getElementById('tune-cv-btn')?.addEventListener('click', tuneCv);
+    document.getElementById('generate-cover-letter-btn')?.addEventListener('click', generateCoverLetter);
+    document.getElementById('qa-chat-send-btn')?.addEventListener('click', sendInterviewQaMessage);
+    document.getElementById('qa-chat-input')?.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
             sendInterviewQaMessage();
         }
     });
-    document.getElementById('extract-skills-btn').addEventListener('click', extractSkills); // New
-    document.getElementById('craft-questions-btn').addEventListener('click', craftInterviewQuestions); // New
-    document.getElementById('research-company-btn').addEventListener('click', researchCompanyWebsite); // New
-    document.getElementById('generate-about-me-btn').addEventListener('click', generateAboutMeAnswer); // New
-    document.getElementById('fill-profile-btn').addEventListener('click', fillProfileFromResumeAI); // Existing, now in ai_services_frontend.js
+    document.getElementById('extract-skills-btn')?.addEventListener('click', extractSkills);
+    document.getElementById('craft-questions-btn')?.addEventListener('click', craftInterviewQuestions);
+    document.getElementById('research-company-btn')?.addEventListener('click', researchCompanyWebsite);
+    document.getElementById('generate-about-me-btn')?.addEventListener('click', generateAboutMeAnswer);
+    document.getElementById('fill-profile-btn')?.addEventListener('click', fillProfileFromResumeAI);
 
-    // Calendar events (delegated to calendar.js)
-    document.getElementById('prev-month-btn').addEventListener('click', () => changeMonth(-1));
-    document.getElementById('next-month-btn').addEventListener('click', () => changeMonth(1));
-    document.getElementById('add-interview-btn').addEventListener('click', showInterviewFormModal);
-    document.getElementById('interview-form').addEventListener('submit', handleInterviewFormSubmit);
+    // Dashboard month selection listener
+    const dashboardMonthSelect = document.getElementById('dashboard-month-select');
+    if (dashboardMonthSelect) {
+        // Set initial value to current month
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = (today.getMonth() + 1).toString().padStart(2, '0');
+        dashboardMonthSelect.value = `${year}-${month}`;
 
-    // Dashboard events (delegated to dashboard.js)
-    document.getElementById('dashboard-month-select').addEventListener('change', function() {
-        const [year, month] = this.value.split('-').map(Number);
-        currentDashboardDate = new Date(year, month - 1, 1); // Month is 0-indexed for Date object
-        loadDashboardData();
-    });
-}
+        dashboardMonthSelect.addEventListener('change', (event) => {
+            const [selectedYear, selectedMonth] = event.target.value.split('-').map(Number);
+            // Set currentDashboardDate to the first day of the selected month
+            currentDashboardDate = new Date(selectedYear, selectedMonth - 1, 1);
+            loadDashboardData();
+        });
+    }
+});
 
-/**
- * Function to show/hide main tabs.
- * @param {string} tabName The ID of the tab content to show.
- * @param {HTMLElement} clickedTab The navigation tab element that was clicked.
- */
-function showTab(tabName, clickedTab) {
-    // Remove 'active' from all tabs and content
-    document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-
-    // Add 'active' to the clicked tab and corresponding content
-    clickedTab.classList.add('active');
-    document.getElementById(tabName).classList.add('active');
-
-    // If switching to AI Tools, ensure the intro message is visible if no service is selected
-    if (tabName === 'ai-tools') {
-        const aiToolsIntro = document.getElementById('ai-tools-intro-message');
-        const activeServicePage = document.querySelector('.ai-service-page[style*="display: block"]');
-        if (!activeServicePage) {
-            aiToolsIntro.style.display = 'block';
-        } else {
-            aiToolsIntro.style.display = 'none';
+// Function to load profile (can be called by other modules)
+async function loadProfile() {
+    try {
+        const response = await fetch('/api/profile');
+        if (!response.ok) {
+            // If profile doesn't exist yet, that's okay, we'll create a new one
+            if (response.status === 404) {
+                window.profile = {
+                    full_name: "", email: "", phone: "", location: "", summary: "",
+                    education: [], experience: [], skills: [], languages: [], certifications: [],
+                    linkedin_url: "", github_url: "", portfolio_url: "", cv_profile_file: null
+                };
+                console.log("No profile found, initializing a new empty profile.");
+                return;
+            }
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
+        window.profile = await response.json();
+        populateProfileForm(window.profile);
+    } catch (error) {
+        console.error('Error loading profile:', error);
+        showAlert('Error loading profile: ' + error.message, 'error');
     }
 }
 
-// Expose showTab globally so it can be called from other modules if needed
-window.showTab = showTab;
+// Expose loadProfile to the window so other modules can call it
+window.loadProfile = loadProfile;

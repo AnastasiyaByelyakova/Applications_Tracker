@@ -27,6 +27,7 @@ class JobApplication(BaseModel):
     status: ApplicationStatus = ApplicationStatus.APPLIED
     cv_file: Optional[str] = None
     cover_letter: Optional[str] = None
+    last_updated: datetime = Field(default_factory=datetime.now)  # Added last_updated field
 
     class Config:
         use_enum_values = True
@@ -72,6 +73,7 @@ class UserProfile(BaseModel):
 
 class Interview(BaseModel):
     id: Optional[str] = None
+    # Removed job_application_id
     interview_title: str
     start_datetime: datetime
     end_datetime: datetime

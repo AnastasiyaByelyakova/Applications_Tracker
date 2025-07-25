@@ -504,7 +504,7 @@ h4 {
 }
 
 .application-list-table tr:hover {
-    background-color: #f0f4f8; /* Light blue-gray on hover */
+    background-color: #f0f4f8;
 }
 
 .application-list-table td .status-select {
@@ -625,7 +625,7 @@ h4 {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-    background-color: #eaf2f7; /* Very light blue */
+    background-color: #eaf2f7; /* Very light pastel blue */
     padding: 15px 20px;
     border-radius: 10px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.05);
@@ -802,11 +802,6 @@ h4 {
 
 .mini-calendar-day.empty {
     background-color: #e0e7eb;
-}
-
-.mini-day-number {
-    font-weight: 500;
-    color: #2d3748;
 }
 
 .mini-event-indicator {

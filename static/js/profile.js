@@ -1,445 +1,432 @@
-// Global variable for profile module
-let profile = {};
+// Global variable to hold the profile data, managed by app.js (window.profile)
+
 /**
- * Loads the user profile from the backend API.
+ * Populates the profile form with data.
+ * @param {object} profileData The user profile data object.
  */
-async function loadProfile() {
-    try {
-        const response = await fetch('/api/profile');
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const fetchedProfile = await response.json();
-        if (Object.keys(fetchedProfile).length > 0) { // Check if profile is not empty
-            profile = fetchedProfile;
-            populateProfileForm();
-        } else {
-            profile = { // Initialize with empty lists if no profile exists
-                full_name: "", email: "", phone: "", location: "", summary: "",
-                education: [], experience: [], skills: [], languages: [], certifications: [],
-                linkedin_url: "", github_url: "", portfolio_url: "", "cv_profile_file": ""
-            };
-        }
-    } catch (error) {
-        console.error('Error loading profile:', error);
-        showAlert('Failed to load profile. Please try again.', 'error');
-        profile = { // Fallback to empty profile on error
-            full_name: "", email: "", phone: "", location: "", summary: "",
-            education: [], experience: [], skills: [], languages: [], certifications: [],
-            linkedin_url: "", github_url: "", portfolio_url: "", "cv_profile_file": ""
-        };
+function populateProfileForm(profileData) {
+    document.getElementById('profile-full-name').value = profileData.full_name || '';
+    document.getElementById('profile-email').value = profileData.email || '';
+    document.getElementById('profile-phone').value = profileData.phone || '';
+    document.getElementById('profile-location').value = profileData.location || '';
+    document.getElementById('profile-summary').value = profileData.summary || '';
+
+    // Ensure these are always arrays before rendering
+    renderEducation(profileData.education || []);
+    renderExperience(profileData.experience || []);
+    renderSkills(profileData.skills || []);
+    renderLanguages(profileData.languages || []);
+    renderCertifications(profileData.certifications || []);
+
+    document.getElementById('profile-linkedin').value = profileData.linkedin_url || '';
+    document.getElementById('profile-github').value = profileData.github_url || '';
+    document.getElementById('profile-portfolio').value = profileData.portfolio_url || '';
+
+    const cvFileNameSpan = document.getElementById('profile-cv-filename');
+    if (profileData.cv_profile_file) {
+        cvFileNameSpan.textContent = profileData.cv_profile_file.split('/').pop(); // Display just the filename
+    } else {
+        cvFileNameSpan.textContent = 'No file uploaded';
     }
 }
 
 /**
- * Populates the profile form fields with the current profile data.
+ * Gathers data from the profile form.
+ * @returns {object} The user profile data object.
  */
-function populateProfileForm() {
-    document.getElementById('profile-full-name').value = profile.full_name || '';
-    document.getElementById('profile-email').value = profile.email || '';
-    document.getElementById('profile-phone').value = profile.phone || '';
-    document.getElementById('profile-location').value = profile.location || '';
-    document.getElementById('profile-summary').value = profile.summary || '';
-    document.getElementById('profile-linkedin').value = profile.linkedin_url || '';
-    document.getElementById('profile-github').value = profile.github_url || '';
-    document.getElementById('profile-portfolio').value = profile.portfolio_url || '';
-    document.getElementById('profile-cv-filename').textContent = profile.cv_profile_file ? `File: ${profile.cv_profile_file.split('/').pop()}` : 'No file uploaded';
+function getProfileFormData() {
+    const education = [];
+    document.querySelectorAll('#education-list .dynamic-item').forEach(item => {
+        education.push({
+            degree: item.querySelector('[name="education-degree"]').value,
+            institution: item.querySelector('[name="education-institution"]').value,
+            graduation_year: parseInt(item.querySelector('[name="education-graduation-year"]').value) || null,
+            gpa: parseFloat(item.querySelector('[name="education-gpa"]').value) || null
+        });
+    });
 
-    renderEducation();
-    renderExperience();
-    renderSkills();
-    renderLanguages();
-    renderCertifications();
+    const experience = [];
+    document.querySelectorAll('#experience-list .dynamic-item').forEach(item => {
+        experience.push({
+            position: item.querySelector('[name="experience-position"]').value,
+            company: item.querySelector('[name="experience-company"]').value,
+            start_date: item.querySelector('[name="experience-start-date"]').value,
+            end_date: item.querySelector('[name="experience-end-date"]').value || null,
+            description: item.querySelector('[name="experience-description"]').value
+        });
+    });
+
+    const skills = [];
+    document.querySelectorAll('#skills-list .dynamic-item').forEach(item => {
+        skills.push({
+            name: item.querySelector('[name="skill-name"]').value,
+            level: item.querySelector('[name="skill-level"]').value
+        });
+    });
+
+    const languages = Array.from(document.querySelectorAll('#languages-list .dynamic-item input[name="language-name"]'))
+        .map(input => input.value.trim())
+        .filter(value => value);
+
+    const certifications = Array.from(document.querySelectorAll('#certifications-list .dynamic-item input[name="certification-name"]'))
+        .map(input => input.value.trim())
+        .filter(value => value);
+
+    return {
+        id: window.profile ? window.profile.id : null, // Preserve ID if exists
+        full_name: document.getElementById('profile-full-name').value,
+        email: document.getElementById('profile-email').value,
+        phone: document.getElementById('profile-phone').value,
+        location: document.getElementById('profile-location').value,
+        summary: document.getElementById('profile-summary').value,
+        education: education,
+        experience: experience,
+        skills: skills,
+        languages: languages,
+        certifications: certifications,
+        linkedin_url: document.getElementById('profile-linkedin').value,
+        github_url: document.getElementById('profile-github').value,
+        portfolio_url: document.getElementById('profile-portfolio').value,
+        // cv_profile_file is handled separately via file upload
+        cv_profile_file: window.profile ? window.profile.cv_profile_file : null // Keep existing file path if not re-uploaded
+    };
 }
 
 /**
- * Saves the user profile to the backend API.
- * @param {Event} event The form submission event.
+ * Saves the user profile.
  */
-async function saveProfile(event) {
-    event.preventDefault();
+async function saveProfile() {
+    const profileData = getProfileFormData();
+    const profileCvFile = document.getElementById('profile-cv-file').files[0];
 
-    profile.full_name = document.getElementById('profile-full-name').value;
-    profile.email = document.getElementById('profile-email').value;
-    profile.phone = document.getElementById('profile-phone').value;
-    profile.location = document.getElementById('profile-location').value;
-    profile.summary = document.getElementById('profile-summary').value;
-    profile.linkedin_url = document.getElementById('profile-linkedin').value;
-    profile.github_url = document.getElementById('profile-github').value;
-    profile.portfolio_url = document.getElementById('profile-portfolio').value;
+    const formData = new FormData();
+    // Append JSON data as a string
+    formData.append('profile', JSON.stringify(profileData));
+
+    // Append file if selected
+    if (profileCvFile) {
+        formData.append('cv_profile_file', profileCvFile);
+    }
 
     try {
         const response = await fetch('/api/profile', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(profile)
+            method: 'POST', // Use POST for both create and update, backend handles logic
+            body: formData // FormData sets Content-Type header automatically
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        if (response.ok) {
+            const updatedProfile = await response.json();
+            window.profile = updatedProfile; // Update global profile with returned data (including ID if new)
+            populateProfileForm(window.profile); // Re-populate to show any backend-generated data (like ID)
+            showAlert('Profile saved successfully!', 'success');
+            // After saving, reload dashboard to reflect potential skill changes
+            loadDashboardData();
+        } else {
+            let errorMessage = 'Failed to save profile.';
+            try {
+                const errorData = await response.json();
+                if (errorData.detail && Array.isArray(errorData.detail)) {
+                    // FastAPI validation errors are often in errorData.detail as an array
+                    errorMessage = errorData.detail.map(err => {
+                        const loc = err.loc ? err.loc.join('.') : 'unknown';
+                        return `${loc}: ${err.msg}`;
+                    }).join('\n');
+                } else if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                } else {
+                    errorMessage = await response.text();
+                }
+            } catch (parseError) {
+                // If response is not JSON, use raw text
+                errorMessage = await response.text();
+            }
+            throw new Error(errorMessage);
         }
-
-        const savedProfile = await response.json();
-        profile = savedProfile; // Update global profile with saved data (including ID)
-        populateProfileForm(); // Re-populate to ensure consistency
-        showAlert('Profile saved successfully!', 'success');
     } catch (error) {
         console.error('Error saving profile:', error);
-        showAlert('Failed to save profile. Please try again.', 'error');
+        showAlert('Error saving profile: ' + error.message, 'error');
     }
 }
 
-/**
- * Handles the upload of the main profile CV file.
- * @param {Event} event The file input change event.
- */
-async function handleProfileCvUpload(event) {
-    const file = event.target.files[0];
-    if (!file) {
-        profile.cv_profile_file = null; // Clear if no file selected
-        document.getElementById('profile-cv-filename').textContent = 'No file uploaded';
-        return;
-    }
+// --- Dynamic List Rendering Functions ---
 
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-        const uploadResponse = await fetch('/api/profile/upload-cv', {
-            method: 'POST',
-            body: formData
-        });
-        if (!uploadResponse.ok) {
-            throw new Error('Failed to upload profile CV file.');
-        }
-        const uploadResult = await uploadResponse.json();
-        profile.cv_profile_file = uploadResult.path; // Store the path
-        document.getElementById('profile-cv-filename').textContent = `File: ${file.name}`;
-        showAlert('Profile CV uploaded successfully!', 'success');
-    } catch (error) {
-        console.error('Error uploading profile CV:', error);
-        showAlert('Failed to upload profile CV. ' + error.message, 'error');
-        profile.cv_profile_file = null; // Clear on error
-        document.getElementById('profile-cv-file').value = ''; // Clear file input
-        document.getElementById('profile-cv-filename').textContent = 'No file uploaded';
-    }
-}
-
-
-// --- Dynamic List Management (Education, Experience, Skills, etc.) ---
-
-/**
- * Renders the education entries in the profile form.
- */
-function renderEducation() {
-    const educationList = document.getElementById('education-list');
-    educationList.innerHTML = '';
-    profile.education.forEach((edu, index) => {
+function renderEducation(educationList) {
+    const container = document.getElementById('education-list');
+    container.innerHTML = '';
+    (educationList || []).forEach((edu, index) => { // Ensure educationList is an array
         const item = document.createElement('div');
         item.className = 'dynamic-item';
         item.innerHTML = `
-            <div class="form-group editable-cell">
+            <div class="form-group">
                 <label>Degree</label>
-                <input type="text" value="${edu.degree || ''}" onchange="updateEducationField(${index}, 'degree', this.value)">
+                <input type="text" name="education-degree" value="${edu.degree || ''}">
             </div>
-            <div class="form-group editable-cell">
+            <div class="form-group">
                 <label>Institution</label>
-                <input type="text" value="${edu.institution || ''}" onchange="updateEducationField(${index}, 'institution', this.value)">
+                <input type="text" name="education-institution" value="${edu.institution || ''}">
             </div>
-            <div class="form-group editable-cell">
+            <div class="form-group">
                 <label>Graduation Year</label>
-                <input type="number" value="${edu.graduation_year || ''}" onchange="updateEducationField(${index}, 'graduation_year', parseInt(this.value))">
+                <input type="number" name="education-graduation-year" value="${edu.graduation_year || ''}" min="1900" max="${new Date().getFullYear() + 5}">
             </div>
-            <div class="form-group editable-cell">
+            <div class="form-group">
                 <label>GPA</label>
-                <input type="number" step="0.01" value="${edu.gpa || ''}" onchange="updateEducationField(${index}, 'gpa', parseFloat(this.value))">
+                <input type="number" name="education-gpa" step="0.01" value="${edu.gpa || ''}">
             </div>
-            <button type="button" class="btn btn-danger btn-sm remove-btn" onclick="removeEducation(${index})">Remove</button>
+            <button type="button" class="btn btn-danger btn-sm remove-btn" data-index="${index}">Remove</button>
         `;
-        educationList.appendChild(item);
+        container.appendChild(item);
     });
+    addRemoveEventListeners(container, 'education');
 }
 
-/**
- * Adds a new empty education field to the profile.
- */
-function addEducationField() {
-    profile.education.push({ degree: '', institution: '', graduation_year: null, gpa: null });
-    renderEducation();
-}
-
-/**
- * Removes an education entry from the profile.
- * @param {number} index The index of the education entry to remove.
- */
-function removeEducation(index) {
-    profile.education.splice(index, 1);
-    renderEducation();
-}
-
-/**
- * Updates a specific field of an education entry.
- * @param {number} index The index of the education entry.
- * @param {string} field The field name to update.
- * @param {any} value The new value for the field.
- */
-function updateEducationField(index, field, value) {
-    profile.education[index][field] = value;
-}
-
-/**
- * Placeholder for sorting education entries (if a table view were added).
- * @param {string} column The column to sort by.
- */
-function sortTableEducation(column) {
-    // This function is a placeholder. If a table view for education is added,
-    // this would contain the logic to sort the `profile.education` array
-    // and then call `renderEducation()`.
-    showAlert(`Education sorted by ${column} (feature not fully implemented)`, 'info');
-}
-
-/**
- * Renders the experience entries in the profile form.
- */
-function renderExperience() {
-    const experienceList = document.getElementById('experience-list');
-    experienceList.innerHTML = '';
-    profile.experience.forEach((exp, index) => {
-        const startDateFormatted = exp.start_date ? exp.start_date.substring(0, 7) : '';
-        const endDateFormatted = exp.end_date ? exp.end_date.substring(0, 7) : '';
-
+function renderExperience(experienceList) {
+    const container = document.getElementById('experience-list');
+    container.innerHTML = '';
+    (experienceList || []).forEach((exp, index) => { // Ensure experienceList is an array
         const item = document.createElement('div');
         item.className = 'dynamic-item';
         item.innerHTML = `
-            <div class="form-group editable-cell">
+            <div class="form-group">
                 <label>Position</label>
-                <input type="text" value="${exp.position || ''}" onchange="updateExperienceField(${index}, 'position', this.value)">
+                <input type="text" name="experience-position" value="${exp.position || ''}">
             </div>
-            <div class="form-group editable-cell">
+            <div class="form-group">
                 <label>Company</label>
-                <input type="text" value="${exp.company || ''}" onchange="updateExperienceField(${index}, 'company', this.value)">
+                <input type="text" name="experience-company" value="${exp.company || ''}">
             </div>
-            <div class="form-group editable-cell">
+            <div class="form-group">
                 <label>Start Date</label>
-                <input type="month" value="${startDateFormatted}" onchange="updateExperienceField(${index}, 'start_date', this.value)">
+                <input type="month" name="experience-start-date" value="${exp.start_date || ''}">
             </div>
-            <div class="form-group editable-cell">
-                <label>End Date</label>
-                <input type="month" value="${endDateFormatted}" onchange="updateExperienceField(${index}, 'end_date', this.value)">
+            <div class="form-group">
+                <label>End Date (or 'Present')</label>
+                <input type="month" name="experience-end-date" value="${exp.end_date || ''}">
             </div>
-            <div class="form-group editable-cell full-width">
+            <div class="form-group full-width">
                 <label>Description</label>
-                <textarea rows="3" onchange="updateExperienceField(${index}, 'description', this.value)">${exp.description || ''}</textarea>
+                <textarea name="experience-description" rows="3">${exp.description || ''}</textarea>
             </div>
-            <button type="button" class="btn btn-danger btn-sm remove-btn" onclick="removeExperience(${index})">Remove</button>
+            <button type="button" class="btn btn-danger btn-sm remove-btn" data-index="${index}">Remove</button>
         `;
-        experienceList.appendChild(item);
+        container.appendChild(item);
     });
+    addRemoveEventListeners(container, 'experience');
 }
 
-/**
- * Adds a new empty experience field to the profile.
- */
-function addExperienceField() {
-    profile.experience.push({ position: '', company: '', start_date: '', end_date: '', description: '' });
-    renderExperience();
-}
-
-/**
- * Removes an experience entry from the profile.
- * @param {number} index The index of the experience entry to remove.
- */
-function removeExperience(index) {
-    profile.experience.splice(index, 1);
-    renderExperience();
-}
-
-/**
- * Updates a specific field of an experience entry.
- * @param {number} index The index of the experience entry.
- * @param {string} field The field name to update.
- * @param {any} value The new value for the field.
- */
-function updateExperienceField(index, field, value) {
-    profile.experience[index][field] = value;
-}
-
-/**
- * Placeholder for sorting experience entries.
- * @param {string} column The column to sort by.
- */
-function sortTableExperience(column) {
-    showAlert(`Experience sorted by ${column} (feature not fully implemented)`, 'info');
-}
-
-/**
- * Renders the skills entries in the profile form.
- */
-function renderSkills() {
-    const skillsList = document.getElementById('skills-list');
-    skillsList.innerHTML = '';
-    profile.skills.forEach((skill, index) => {
+function renderSkills(skillsList) {
+    const container = document.getElementById('skills-list');
+    container.innerHTML = '';
+    (skillsList || []).forEach((skill, index) => { // Ensure skillsList is an array
         const item = document.createElement('div');
         item.className = 'dynamic-item';
         item.innerHTML = `
-            <div class="form-group editable-cell">
+            <div class="form-group">
                 <label>Skill Name</label>
-                <input type="text" value="${skill.name || ''}" onchange="updateSkill(${index}, 'name', this.value)">
+                <input type="text" name="skill-name" value="${skill.name || ''}">
             </div>
-            <div class="form-group editable-cell">
+            <div class="form-group">
                 <label>Level</label>
-                <select onchange="updateSkill(${index}, 'level', this.value)">
+                <select name="skill-level">
                     <option value="Beginner" ${skill.level === 'Beginner' ? 'selected' : ''}>Beginner</option>
                     <option value="Intermediate" ${skill.level === 'Intermediate' ? 'selected' : ''}>Intermediate</option>
                     <option value="Advanced" ${skill.level === 'Advanced' ? 'selected' : ''}>Advanced</option>
                     <option value="Expert" ${skill.level === 'Expert' ? 'selected' : ''}>Expert</option>
                 </select>
             </div>
-            <button type="button" class="btn btn-danger btn-sm remove-btn" onclick="removeSkill(${index})">Remove</button>
+            <button type="button" class="btn btn-danger btn-sm remove-btn" data-index="${index}">Remove</button>
         `;
-        skillsList.appendChild(item);
+        container.appendChild(item);
     });
+    addRemoveEventListeners(container, 'skills');
 }
 
-/**
- * Adds a new empty skill field to the profile.
- */
-function addSkillField() {
-    profile.skills.push({ name: '', level: 'Intermediate' });
-    renderSkills();
-}
-
-/**
- * Removes a skill entry from the profile.
- * @param {number} index The index of the skill entry to remove.
- */
-function removeSkill(index) {
-    profile.skills.splice(index, 1);
-    renderSkills();
-}
-
-/**
- * Updates a specific field of a skill entry.
- * @param {number} index The index of the skill entry.
- * @param {string} field The field name to update.
- * @param {any} value The new value for the field.
- */
-function updateSkill(index, field, value) {
-    profile.skills[index][field] = value;
-}
-
-/**
- * Renders the languages entries in the profile form.
- */
-function renderLanguages() {
-    const languagesList = document.getElementById('languages-list');
-    languagesList.innerHTML = '';
-    profile.languages.forEach((lang, index) => {
+function renderLanguages(languagesList) {
+    const container = document.getElementById('languages-list');
+    container.innerHTML = '';
+    (languagesList || []).forEach((lang, index) => { // Ensure languagesList is an array
         const item = document.createElement('div');
         item.className = 'dynamic-item';
         item.innerHTML = `
-            <div class="form-group editable-cell">
+            <div class="form-group">
                 <label>Language</label>
-                <input type="text" value="${lang || ''}" onchange="updateLanguage(${index}, this.value)">
+                <input type="text" name="language-name" value="${lang || ''}">
             </div>
-            <button type="button" class="btn btn-danger btn-sm remove-btn" onclick="removeLanguage(${index})">Remove</button>
+            <button type="button" class="btn btn-danger btn-sm remove-btn" data-index="${index}">Remove</button>
         `;
-        languagesList.appendChild(item);
+        container.appendChild(item);
     });
+    addRemoveEventListeners(container, 'languages');
 }
 
-/**
- * Adds a new empty language field to the profile.
- */
-function addLanguageField() {
-    profile.languages.push('');
-    renderLanguages();
-}
-
-/**
- * Removes a language entry from the profile.
- * @param {number} index The index of the language entry to remove.
- */
-function removeLanguage(index) {
-    profile.languages.splice(index, 1);
-    renderLanguages();
-}
-
-/**
- * Updates a specific language entry.
- * @param {number} index The index of the language entry.
- * @param {string} value The new value for the language.
- */
-function updateLanguage(index, value) {
-    profile.languages[index] = value;
-}
-
-/**
- * Renders the certifications entries in the profile form.
- */
-function renderCertifications() {
-    const certificationsList = document.getElementById('certifications-list');
-    certificationsList.innerHTML = '';
-    profile.certifications.forEach((cert, index) => {
+function renderCertifications(certificationsList) {
+    const container = document.getElementById('certifications-list');
+    container.innerHTML = '';
+    (certificationsList || []).forEach((cert, index) => { // Ensure certificationsList is an array
         const item = document.createElement('div');
         item.className = 'dynamic-item';
         item.innerHTML = `
-            <div class="form-group editable-cell">
+            <div class="form-group">
                 <label>Certification</label>
-                <input type="text" value="${cert || ''}" onchange="updateCertification(${index}, this.value)">
+                <input type="text" name="certification-name" value="${cert || ''}">
             </div>
-            <button type="button" class="btn btn-danger btn-sm remove-btn" onclick="removeCertification(${index})">Remove</button>
+            <button type="button" class="btn btn-danger btn-sm remove-btn" data-index="${index}">Remove</button>
         `;
-        certificationsList.appendChild(item);
+        container.appendChild(item);
+    });
+    addRemoveEventListeners(container, 'certifications');
+}
+
+// --- Add New Item Functions ---
+
+function addEducationItem() {
+    const container = document.getElementById('education-list');
+    const item = document.createElement('div');
+    item.className = 'dynamic-item';
+    item.innerHTML = `
+        <div class="form-group">
+            <label>Degree</label>
+            <input type="text" name="education-degree">
+        </div>
+        <div class="form-group">
+            <label>Institution</label>
+            <input type="text" name="education-institution">
+        </div>
+        <div class="form-group">
+            <label>Graduation Year</label>
+            <input type="number" name="education-graduation-year" min="1900" max="${new Date().getFullYear() + 5}">
+        </div>
+        <div class="form-group">
+            <label>GPA</label>
+            <input type="number" name="education-gpa" step="0.01">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm remove-btn">Remove</button>
+    `;
+    container.appendChild(item);
+    addRemoveEventListeners(container, 'education');
+}
+
+function addExperienceItem() {
+    const container = document.getElementById('experience-list');
+    const item = document.createElement('div');
+    item.className = 'dynamic-item';
+    item.innerHTML = `
+        <div class="form-group">
+            <label>Position</label>
+            <input type="text" name="experience-position">
+        </div>
+        <div class="form-group">
+            <label>Company</labe l>
+            <input type="text" name="experience-company">
+        </div>
+        <div class="form-group">
+            <label>Start Date</label>
+            <input type="month" name="experience-start-date">
+        </div>
+        <div class="form-group">
+            <label>End Date (or 'Present')</label>
+            <input type="month" name="experience-end-date">
+        </div>
+        <div class="form-group full-width">
+            <label>Description</label>
+            <textarea name="experience-description" rows="3"></textarea>
+        </div>
+        <button type="button" class="btn btn-danger btn-sm remove-btn">Remove</button>
+    `;
+    container.appendChild(item);
+    addRemoveEventListeners(container, 'experience');
+}
+
+function addSkillItem() {
+    const container = document.getElementById('skills-list');
+    const item = document.createElement('div');
+    item.className = 'dynamic-item';
+    item.innerHTML = `
+        <div class="form-group">
+            <label>Skill Name</label>
+            <input type="text" name="skill-name">
+        </div>
+        <div class="form-group">
+            <label>Level</label>
+            <select name="skill-level">
+                <option value="Beginner">Beginner</option>
+                <option value="Intermediate">Intermediate</option>
+                <option value="Advanced" selected>Advanced</option>
+                <option value="Expert">Expert</option>
+            </select>
+        </div>
+        <button type="button" class="btn btn-danger btn-sm remove-btn">Remove</button>
+    `;
+    container.appendChild(item);
+    addRemoveEventListeners(container, 'skills');
+}
+
+function addLanguageItem() {
+    const container = document.getElementById('languages-list');
+    const item = document.createElement('div');
+    item.className = 'dynamic-item';
+    item.innerHTML = `
+        <div class="form-group">
+            <label>Language</label>
+            <input type="text" name="language-name">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm remove-btn">Remove</button>
+    `;
+    container.appendChild(item);
+    addRemoveEventListeners(container, 'languages');
+}
+
+function addCertificationItem() {
+    const container = document.getElementById('certifications-list');
+    const item = document.createElement('div');
+    item.className = 'dynamic-item';
+    item.innerHTML = `
+        <div class="form-group">
+            <label>Certification</label>
+            <input type="text" name="certification-name">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm remove-btn">Remove</button>
+    `;
+    container.appendChild(item);
+    addRemoveEventListeners(container, 'certifications');
+}
+
+// --- Event Listener for Remove Buttons ---
+
+function addRemoveEventListeners(container, type) {
+    container.querySelectorAll('.remove-btn').forEach(button => {
+        button.onclick = null; // Remove existing listeners to prevent duplicates
+        button.addEventListener('click', function() {
+            const itemToRemove = this.closest('.dynamic-item');
+            showConfirm(`Are you sure you want to remove this ${type} entry?`, () => {
+                itemToRemove.remove();
+                // If the profile is currently loaded, remove the item from the global profile object as well
+                if (window.profile && window.profile[type]) {
+                    const index = Array.from(container.children).indexOf(itemToRemove);
+                    if (index > -1) {
+                        window.profile[type].splice(index, 1);
+                    }
+                }
+            });
+        });
     });
 }
 
-/**
- * Adds a new empty certification field to the profile.
- */
-function addCertificationField() {
-    profile.certifications.push('');
-    renderCertifications();
-}
+// --- Event Listeners for Profile Page ---
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('profile-form')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        await saveProfile();
+    });
 
-/**
- * Removes a certification entry from the profile.
- * @param {number} index The index of the certification entry to remove.
- */
-function removeCertification(index) {
-    profile.certifications.splice(index, 1);
-    renderCertifications();
-}
+    document.getElementById('add-education-btn')?.addEventListener('click', addEducationItem);
+    document.getElementById('add-experience-btn')?.addEventListener('click', addExperienceItem);
+    document.getElementById('add-skill-btn')?.addEventListener('click', addSkillItem);
+    document.getElementById('add-language-btn')?.addEventListener('click', addLanguageItem);
+    document.getElementById('add-certification-btn')?.addEventListener('click', addCertificationItem);
+});
 
-/**
- * Updates a specific certification entry.
- * @param {number} index The index of the certification entry.
- * @param {string} value The new value for the certification.
- */
-function updateCertification(index, value) {
-    profile.certifications[index] = value;
-}
-
-// Expose functions to the global scope for HTML event handlers
-window.loadProfile = loadProfile;
-window.saveProfile = saveProfile;
-window.handleProfileCvUpload = handleProfileCvUpload;
-window.addEducationField = addEducationField;
-window.removeEducation = removeEducation;
-window.updateEducationField = updateEducationField;
-window.sortTableEducation = sortTableEducation;
-window.addExperienceField = addExperienceField;
-window.removeExperience = removeExperience;
-window.updateExperienceField = updateExperienceField;
-window.sortTableExperience = sortTableExperience;
-window.addSkillField = addSkillField;
-window.removeSkill = removeSkill;
-window.updateSkill = updateSkill;
-window.addLanguageField = addLanguageField;
-window.removeLanguage = removeLanguage;
-window.updateLanguage = updateLanguage;
-window.addCertificationField = addCertificationField;
-window.removeCertification = removeCertification;
-window.updateCertification = updateCertification;
+// Expose functions to the global scope for app.js and other modules
+window.populateProfileForm = populateProfileForm;
+window.getProfileFormData = getProfileFormData; // Potentially useful for AI tools
+window.saveProfile = saveProfile; // Expose saveProfile for direct calls if needed
