@@ -230,6 +230,7 @@ Education:
                                   api_key: str) -> str:
         """Estimate job chance based on profile and job description"""
         profile_text = self._format_profile_for_ai(profile)
+
         prompt = f"""
         Analyze the following candidate profile against the provided job description.
         Candidate Profile:
@@ -336,13 +337,6 @@ Education:
         # So, we pass the existing chat history (or the initial system-infused prompt)
         # and the last user message from the frontend as the `prompt` argument.
 
-        # The frontend sends the user's latest message as `prompt` to this function.
-        # We need to ensure that `_call_ai_provider` correctly appends this.
-        # The `messages_for_ai` list constructed here *already* contains the full history
-        # including the latest user message from `chat_history`.
-        # So, we pass the last user message as the `prompt` to `_call_ai_provider` and
-        # the rest of the history as `messages`.
-
         # The `_call_ai_provider` function expects the *current* user prompt as `prompt`
         # and the *previous* chat history as `messages`.
         # So, we take the last user message from `chat_history` as the `prompt`
@@ -404,15 +398,22 @@ Education:
         """Extract key information from a company's website using browsing tool."""
         try:
             # Use the browsing tool to fetch the content of the URL
+            company_website_content = await browsing.browse(query=f"content of {company_url}", url=company_url)
+
+            if not company_website_content:
+                return "Could not retrieve content from the company website. It might be inaccessible or empty."
 
             prompt = f"""
-            Analyze the following content extracted from {company_url}.
+            Analyze the following content extracted from a company's website.
             Extract the following key information:
             1.  **Mission Statement:** The company's core purpose or mission.
             2.  **Values:** The core principles or beliefs that guide the company.
             3.  **Work Areas/Products/Services:** What the company primarily does, its main offerings, or key departments.
             4.  **Recent Projects/Achievements (if discernible):** Any notable recent projects, successes, or milestones.
             5.  **Recent News/Updates (if discernible):** Any significant news, press releases, or announcements.
+
+            Company Website Content (from {company_url}):
+            {company_website_content[:8000]}  # Limit content to avoid token limits, adjust as needed
 
             Please present the information clearly, with headings for each section. If a section is not found, state "Not found" or "N/A".
             """

@@ -1,16 +1,19 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from datetime import datetime, date
 import os
 import json
-
-from pydantic import BaseModel # Import BaseModel for request body validation
+from pydantic import ValidationError  # Import ValidationError
+from enum import Enum  # Import Enum for ApplicationStatus in main.py if not already there
 
 from database import Database
 from models import JobApplication, UserProfile, Interview, ApplicationStatus, AIProvider
 from ai_services import AIService
+import browsing  # Import the browsing tool
+
+print("FastAPI application starting...")  # ADDED THIS LINE FOR DEBUGGING
 
 app = FastAPI()
 db = Database()
@@ -57,86 +60,56 @@ async def get_application(application_id: str):
 
 
 @app.post("/api/applications", response_model=JobApplication)
-async def create_application(
-        job_title: str = Form(...),
-        company: str = Form(...),
-        description: Optional[str] = Form(None),
-        link: Optional[str] = Form(None),
-        application_date: str = Form(..., alias="application_date"),  # Use alias for consistency
-        status: ApplicationStatus = Form(ApplicationStatus.APPLIED),
-        cv_file: Optional[UploadFile] = File(None),
-        cover_letter: Optional[str] = Form(None)
-):
-    cv_file_path = None
-    if cv_file:
-        file_location = os.path.join(UPLOAD_DIR, cv_file.filename)
-        with open(file_location, "wb+") as file_object: # Changed to 'wb+' for binary write
-            file_object.write(await cv_file.read()) # Use await for async file read
-        cv_file_path = file_location
-
-    # Convert application_date string to datetime object
+async def create_application(application: JobApplication):
     try:
-        app_date_obj = datetime.strptime(application_date, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format for application_date. Use YYYY-MM-DD.")
+        # Ensure application_date is set if not provided by client
+        # This check might be redundant if Pydantic's default_factory works,
+        # but it acts as a safeguard.
+        if application.application_date is None:
+            application.application_date = datetime.now()
 
-    application = JobApplication(
-        job_title=job_title,
-        company=company,
-        description=description,
-        link=link,
-        application_date=app_date_obj,
-        status=status,
-        cv_file=cv_file_path,
-        cover_letter=cover_letter
-    )
-    new_application = await db.add_application(application)
-    return new_application
+        # Ensure description, link, cv_file, cover_letter are not None if they are empty strings
+        # This can happen if frontend sends empty string for Optional fields
+        if application.description == "": application.description = None
+        if application.link == "": application.link = None
+        if application.cv_file == "": application.cv_file = None
+        if application.cover_letter == "": application.cover_letter = None
+
+        new_application = await db.add_application(application)
+        if not new_application:
+            raise HTTPException(status_code=500, detail="Failed to add application to database.")
+        return new_application
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for create_application: {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
+    except Exception as e:
+        print(f"Error creating application: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.put("/api/applications/{application_id}", response_model=JobApplication)
-async def update_application(
-        application_id: str,
-        job_title: str = Form(...),
-        company: str = Form(...),
-        description: Optional[str] = Form(None),
-        link: Optional[str] = Form(None),
-        application_date: str = Form(..., alias="application_date"),
-        status: ApplicationStatus = Form(ApplicationStatus.APPLIED),
-        cv_file: Optional[UploadFile] = File(None),
-        cover_letter: Optional[str] = Form(None)
-):
-    existing_application = await db.get_application(application_id)
-    if not existing_application:
-        raise HTTPException(status_code=404, detail="Application not found")
-
-    cv_file_path = existing_application.cv_file  # Keep existing file if not new one uploaded
-    if cv_file:
-        file_location = os.path.join(UPLOAD_DIR, cv_file.filename)
-        with open(file_location, "wb+") as file_object: # Changed to 'wb+' for binary write
-            file_object.write(await cv_file.read()) # Use await for async file read
-        cv_file_path = file_location
-
+async def update_application(application_id: str, application: JobApplication):
     try:
-        app_date_obj = datetime.strptime(application_date, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format for application_date. Use YYYY-MM-DD.")
+        # Ensure application_date is set if not provided by client
+        if application.application_date is None:
+            application.application_date = datetime.now()
 
-    application = JobApplication(
-        id=application_id,  # Ensure ID is passed for update
-        job_title=job_title,
-        company=company,
-        description=description,
-        link=link,
-        application_date=app_date_obj,
-        status=status,
-        cv_file=cv_file_path,
-        cover_letter=cover_letter
-    )
-    updated_application = await db.update_application(application_id, application)
-    if not updated_application:
-        raise HTTPException(status_code=500, detail="Failed to update application")
-    return updated_application
+        # Ensure description, link, cv_file, cover_letter are not None if they are empty strings
+        if application.description == "": application.description = None
+        if application.link == "": application.link = None
+        if application.cv_file == "": application.cv_file = None
+        if application.cover_letter == "": application.cover_letter = None
+
+        updated_application = await db.update_application(application_id, application)
+        if not updated_application:
+            raise HTTPException(status_code=404, detail="Application not found or failed to update")
+        return updated_application
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for update_application (ID: {application_id}): {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
+    except Exception as e:
+        print(f"Error updating application {application_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/api/applications/{application_id}")
@@ -147,44 +120,52 @@ async def delete_application(application_id: str):
     return {"message": "Application deleted successfully"}
 
 
+@app.post("/api/upload-cv")
+async def upload_cv(file: UploadFile = File(...)):
+    file_location = os.path.join(UPLOAD_DIR, file.filename)
+    try:
+        with open(file_location, "wb+") as file_object:
+            file_object.write(await file.read())
+        return {"message": "CV uploaded successfully", "path": f"/uploads/{file.filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload CV: {e}")
+
+
 # --- User Profile Endpoints ---
 
 @app.get("/api/profile", response_model=UserProfile)
 async def get_profile():
     profile = await db.get_user_profile()
     if not profile:
-        # If no profile exists, return a default empty profile structure
-        # This prevents 404 and allows frontend to initialize form
+        # Return a default empty profile if none exists
         return UserProfile()
     return profile
 
 
 @app.post("/api/profile", response_model=UserProfile)
-async def save_profile(
-        profile: str = Form(...),  # Receive profile data as a JSON string
-        cv_profile_file: Optional[UploadFile] = File(None)
-):
-    # Parse the JSON string back into a UserProfile Pydantic model
+async def save_profile(profile: UserProfile):
     try:
-        profile_data = json.loads(profile)
-        user_profile = UserProfile(**profile_data)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON format for profile data.")
+        saved_profile = await db.save_user_profile(profile)
+        if not saved_profile:
+            raise HTTPException(status_code=500, detail="Failed to save profile.")
+        return saved_profile
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for save_profile: {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
     except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Error parsing profile data: {e}")
+        print(f"Error saving profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    cv_file_path = user_profile.cv_profile_file  # Preserve existing path if not updated
-    if cv_profile_file:
-        file_location = os.path.join(UPLOAD_DIR, cv_profile_file.filename)
-        with open(file_location, "wb+") as file_object: # Changed to 'wb+' for binary write
-            file_object.write(await cv_profile_file.read()) # Use await for async file read
-        cv_file_path = file_location
-    user_profile.cv_profile_file = cv_file_path  # Update the Pydantic model
 
-    saved_profile = await db.save_user_profile(user_profile)
-    if not saved_profile:
-        raise HTTPException(status_code=500, detail="Failed to save profile")
-    return saved_profile
+@app.post("/api/profile/upload-cv")
+async def upload_profile_cv(file: UploadFile = File(...)):
+    file_location = os.path.join(UPLOAD_DIR, file.filename)
+    try:
+        with open(file_location, "wb+") as file_object:
+            file_object.write(await file.read())
+        return {"message": "Profile CV uploaded successfully", "path": f"/uploads/{file.filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload profile CV: {e}")
 
 
 # --- Interview Endpoints ---
@@ -206,9 +187,17 @@ async def get_interview(interview_id: str):
 async def create_interview(interview: Interview):
     try:
         new_interview = await db.add_interview(interview)
+        if not new_interview:
+            raise HTTPException(status_code=500, detail="Failed to add interview to database.")
         return new_interview
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))  # For overlap errors
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for create_interview: {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
+    except Exception as e:
+        print(f"Error creating interview: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.put("/api/interviews/{interview_id}", response_model=Interview)
@@ -216,10 +205,16 @@ async def update_interview(interview_id: str, interview: Interview):
     try:
         updated_interview = await db.update_interview(interview_id, interview)
         if not updated_interview:
-            raise HTTPException(status_code=404, detail="Interview not found")
+            raise HTTPException(status_code=404, detail="Interview not found or failed to update")
         return updated_interview
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))  # For overlap errors
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for update_interview (ID: {interview_id}): {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
+    except Exception as e:
+        print(f"Error updating interview {interview_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/api/interviews/{interview_id}")
@@ -232,114 +227,112 @@ async def delete_interview(interview_id: str):
 
 # --- AI Service Endpoints ---
 
-# Pydantic models for AI service request bodies
-class AIAssessmentRequest(BaseModel):
-    job_description: str
-    profile: UserProfile
-    ai_provider: AIProvider
-    api_key: str
-
-class AIRequestWithChatHistory(BaseModel):
-    job_title: str
-    profile: UserProfile
-    chat_history: List[Dict[str, Any]]
-    ai_provider: AIProvider
-    api_key: str
-
-class AICandidateInfoRequest(BaseModel):
-    candidate_info: str
-    ai_provider: AIProvider
-    api_key: str
-
-class AICompanyResearchRequest(BaseModel):
-    company_url: str
-    ai_provider: AIProvider
-    api_key: str
-
-
 @app.post("/api/ai/estimate-chance")
-async def estimate_job_chance_api(request: AIAssessmentRequest = Body(...)):
+async def estimate_chance_ai(job_description: str = Form(...), profile: str = Form(...),
+                             ai_provider: AIProvider = Form(...), api_key: str = Form(...)):
     try:
-        result = await ai_service.estimate_job_chance(
-            request.job_description, request.profile, request.ai_provider, request.api_key
-        )
+        # Parse the profile string back to a UserProfile object
+        profile_obj = UserProfile.parse_raw(profile)
+        result = await ai_service.estimate_job_chance(job_description, profile_obj, ai_provider, api_key)
         return {"result": result}
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for estimate_chance_ai: {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/tune-cv")
-async def tune_cv_api(request: AIAssessmentRequest = Body(...)):
+async def tune_cv_ai(job_description: str = Form(...), profile: str = Form(...), ai_provider: AIProvider = Form(...),
+                     api_key: str = Form(...)):
     try:
-        result = await ai_service.tune_cv(
-            request.job_description, request.profile, request.ai_provider, request.api_key
-        )
+        profile_obj = UserProfile.parse_raw(profile)
+        result = await ai_service.tune_cv(job_description, profile_obj, ai_provider, api_key)
         return {"result": result}
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for tune_cv_ai: {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/ai/cover-letter")
-async def generate_cover_letter_api(request: AIAssessmentRequest = Body(...)):
+@app.post("/api/ai/generate-cover-letter")
+async def generate_cover_letter_ai(job_description: str = Form(...), profile: str = Form(...),
+                                   ai_provider: AIProvider = Form(...), api_key: str = Form(...)):
     try:
-        result = await ai_service.generate_cover_letter(
-            request.job_description, request.profile, request.ai_provider, request.api_key
-        )
+        profile_obj = UserProfile.parse_raw(profile)
+        result = await ai_service.generate_cover_letter(job_description, profile_obj, ai_provider, api_key)
         return {"result": result}
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for generate_cover_letter_ai: {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/interview-qa")
-async def interview_qa_chat_api(request: AIRequestWithChatHistory = Body(...)):
+async def interview_qa_ai(job_title: str = Form(...), profile: str = Form(...), chat_history: str = Form(...),
+                          ai_provider: AIProvider = Form(...), api_key: str = Form(...)):
     try:
-        response = await ai_service.interview_qa_chat(
-            request.job_title, request.profile, request.chat_history, request.ai_provider, request.api_key
-        )
-        return {"response": response}
+        profile_obj = UserProfile.parse_raw(profile)
+        chat_history_list = json.loads(chat_history)  # chat_history is a JSON string of list of dicts
+        result = await ai_service.interview_qa_chat(job_title, profile_obj, chat_history_list, ai_provider, api_key)
+        return {"result": result}
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for interview_qa_ai: {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/ai/skill-extractor")
-async def extract_job_skills_api(request: AIAssessmentRequest = Body(...)):
+@app.post("/api/ai/extract-skills")
+async def extract_skills_ai(job_description: str = Form(...), profile: str = Form(...),
+                            ai_provider: AIProvider = Form(...), api_key: str = Form(...)):
     try:
-        result = await ai_service.extract_job_skills(
-            request.job_description, request.profile, request.ai_provider, request.api_key
-        )
+        profile_obj = UserProfile.parse_raw(profile)
+        result = await ai_service.extract_job_skills(job_description, profile_obj, ai_provider, api_key)
         return {"result": result}
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for extract_skills_ai: {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/ai/craft-interview-questions")
-async def craft_interview_questions_api(request: AICandidateInfoRequest = Body(...)):
+@app.post("/api/ai/craft-questions")
+async def craft_questions_ai(candidate_info: str = Form(...), ai_provider: AIProvider = Form(...),
+                             api_key: str = Form(...)):
     try:
-        result = await ai_service.craft_interview_questions(
-            request.candidate_info, request.ai_provider, request.api_key
-        )
+        result = await ai_service.craft_interview_questions(candidate_info, ai_provider, api_key)
         return {"result": result}
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for craft_questions_ai: {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/company-research")
-async def research_company_website_api(request: AICompanyResearchRequest = Body(...)):
+async def company_research_ai(company_url: str = Form(...), ai_provider: AIProvider = Form(...),
+                              api_key: str = Form(...)):
     try:
-        result = await ai_service.research_company_website(
-            request.company_url, request.ai_provider, request.api_key
-        )
+        # Use the browsing tool directly from here, as it's a backend operation
+        # The AI service will then process the browsed content
+        result = await ai_service.research_company_website(company_url, ai_provider, api_key)
         return {"result": result}
+    except ValidationError as e:
+        print(f"Pydantic Validation Error for company_research_ai: {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/ai/about-me-answer")
-async def generate_about_me_answer_api(request: AIAssessmentRequest = Body(...)):
+async def generate_about_me_answer_ai(job_description: str = Form(...), profile: str = Form(...),
+                                      ai_provider: AIProvider = Form(...), api_key: str = Form(...)):
     try:
-        result = await ai_service.generate_about_me_answer(
-            request.job_description, request.profile, request.ai_provider, request.api_key
-        )
+        profile_obj = UserProfile.parse_raw(profile)
+        result = await ai_service.generate_about_me_answer(job_description, profile_obj, ai_provider, api_key)
         return {"result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -373,4 +366,5 @@ async def fill_profile_from_resume_ai(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
+

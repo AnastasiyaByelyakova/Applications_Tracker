@@ -1,219 +1,218 @@
-// Global variable to store the currently loaded user profile
-window.profile = null;
+// Global variables
+// These are now mostly managed within their respective modules (applications.js, calendar.js, dashboard.js)
+// However, some global references for modals and initial setup remain here.
 
-// Global variables for the confirmation modal, initialized on DOMContentLoaded
-// These are exposed to the window scope so utils.js can access them.
-window.globalConfirmModal = null;
-window.globalConfirmMessage = null;
-window.globalConfirmYesBtn = null;
-window.globalConfirmNoBtn = null;
+// References to the global confirmation modal elements
+let globalConfirmModal;
+let globalConfirmMessage;
+let globalConfirmYesBtn;
+let globalConfirmNoBtn;
 
-document.addEventListener('DOMContentLoaded', async () => {
-    // Initialize global confirmation modal elements
-    window.globalConfirmModal = document.getElementById('global-confirm-modal');
-    window.globalConfirmMessage = document.getElementById('global-confirm-message');
-    window.globalConfirmYesBtn = document.getElementById('global-confirm-yes');
-    window.globalConfirmNoBtn = document.getElementById('global-confirm-no');
 
-    // Get all nav tabs once and convert to an array for stable iteration
-    const allNavTabs = Array.from(document.querySelectorAll('.nav-tab'));
-    console.log('DEBUG: DOMContentLoaded - allNavTabs initialized:', allNavTabs);
+// Initialize the app
+document.addEventListener('DOMContentLoaded', function() {
+    // Get references to global confirm modal elements
+    globalConfirmModal = document.getElementById('global-confirm-modal');
+    globalConfirmMessage = document.getElementById('global-confirm-message');
+    globalConfirmYesBtn = document.getElementById('global-confirm-yes');
+    globalConfirmNoBtn = document.getElementById('global-confirm-no');
 
-    // Tab Navigation
-    allNavTabs.forEach(tab => {
+    // Expose these global elements to the window object so utils.js can access them
+    window.globalConfirmModal = globalConfirmModal;
+    window.globalConfirmMessage = globalConfirmMessage;
+    window.globalConfirmYesBtn = globalConfirmYesBtn;
+    window.globalConfirmNoBtn = globalConfirmNoBtn;
+
+    initializeEventListeners();
+    window.loadApplications(); // Load applications for the main tab (from applications.js)
+    window.loadProfile(); // Load profile (from profile.js)
+    // Show the applications tab by default
+    // Ensure the 'applications' tab element is correctly passed
+    window.showTab('applications', document.querySelector('.nav-tab[data-tab="applications"]'));
+
+    // Explicitly hide all AI tool loading and result divs on page load
+    document.getElementById('ai-tools-intro-message').style.display = 'block'; // Show intro message by default
+    document.querySelectorAll('.ai-service-page').forEach(page => page.style.display = 'none'); // Hide all AI tool sections
+
+    // Hide loading/result divs for AI tools
+    document.getElementById('chance-loading').style.display = 'none';
+    document.getElementById('chance-result').style.display = 'none';
+    document.getElementById('cv-loading').style.display = 'none';
+    document.getElementById('cv-result').style.display = 'none';
+    document.getElementById('cover-letter-loading').style.display = 'none';
+    document.getElementById('cover-letter-result').style.display = 'none';
+    document.getElementById('qa-loading').style.display = 'none';
+    // No qa-result div, chat display handles it
+    document.getElementById('skill-extractor-loading').style.display = 'none';
+    document.getElementById('skill-extractor-result').style.display = 'none';
+    document.getElementById('craft-questions-loading').style.display = 'none';
+    document.getElementById('craft-questions-result').style.display = 'none';
+    document.getElementById('company-research-loading').style.display = 'none';
+    document.getElementById('company-research-result').style.display = 'none';
+    document.getElementById('about-me-loading').style.display = 'none';
+    document.getElementById('about-me-result').style.display = 'none';
+    document.getElementById('fill-profile-loading').style.display = 'none';
+    document.getElementById('fill-profile-result').style.display = 'none';
+});
+
+/**
+ * Initializes all major event listeners for the application.
+ * This function acts as a central point for setting up interactivity.
+ */
+function initializeEventListeners() {
+    // Tab navigation
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        // Skip the AI Tools dropdown itself from the direct tab switching logic
+        // This is now handled by its own click listener below, which also activates the main 'ai-tools' tab.
+        if (tab.id === 'ai-tools-dropdown') {
+            return;
+        }
         tab.addEventListener('click', function() {
-            const tabId = this.dataset.tab; // Get data-tab attribute
-
-            // IMPORTANT: Only proceed with general tab logic if the clicked element has a data-tab.
-            // This correctly excludes the AI Tools dropdown itself, which now lacks data-tab.
-            if (!tabId) {
-                console.log('DEBUG: Clicked element has no data-tab. Skipping general tab logic for:', this);
-                // The dedicated aiToolsDropdown listener (further down) will handle toggling its active state.
-                return; // Exit this handler if it's not a content-switching tab
-            }
-
-            console.log('DEBUG: Regular Tab clicked (with data-tab):', this);
-
-            // Remove 'active' from all tabs and hide all tab contents
-            for (const t of allNavTabs) {
-                if (t && t.classList) {
-                    t.classList.remove('active');
-                } else {
-                    console.error('ERROR: Encountered invalid nav tab element during deactivation:', t);
+            const tabName = this.getAttribute('data-tab');
+            if (tabName) { // Only proceed if data-tab exists
+                window.showTab(tabName, this); // Use showTab from utils.js
+                if (tabName === 'calendar') {
+                    window.loadMonthlyInterviews(); // Load interviews when calendar tab is shown (from calendar.js)
+                    window.renderCalendar(); // Render the calendar grid
+                } else if (tabName === 'dashboard') {
+                    // Set dashboard month selector to current month by default
+                    const year = window.currentDashboardDate.getFullYear(); // Use global from dashboard.js
+                    const month = (window.currentDashboardDate.getMonth() + 1).toString().padStart(2, '0'); // Use global from dashboard.js
+                    document.getElementById('dashboard-month-select').value = `${year}-${month}`;
+                    window.loadDashboardData(); // Call dashboard.js function
                 }
-            }
-            document.querySelectorAll('.tab-content').forEach(content => {
-                if (content && content.classList) {
-                    content.classList.remove('active');
-                } else {
-                    console.error('ERROR: Encountered invalid tab content element during deactivation:', content);
-                }
-            });
-
-            // Add 'active' to the clicked tab
-            this.classList.add('active');
-
-            // Show the corresponding tab content
-            const targetTabContent = document.getElementById(tabId);
-            if (targetTabContent && targetTabContent.classList) {
-                targetTabContent.classList.add('active');
-            } else {
-                console.error('ERROR: Target tab content not found or invalid:', tabId, targetTabContent);
-            }
-
-            // Specific actions when switching tabs
-            if (tabId === 'dashboard') {
-                loadDashboardData();
-            } else if (tabId === 'calendar') {
-                renderCalendar();
-                loadMonthlyInterviews();
-            } else if (tabId === 'applications') {
-                loadApplications();
-            } else if (tabId === 'profile') {
-                loadProfile();
-            }
-            // Hide all AI service sub-pages when switching away from AI Tools,
-            // or ensure only the intro message is shown if AI Tools is selected.
-            if (tabId !== 'ai-tools') {
-                document.querySelectorAll('.ai-service-page').forEach(page => page.style.display = 'none');
-                document.getElementById('ai-tools-intro-message').style.display = 'block';
             }
         });
     });
 
-    // AI Tools Dropdown functionality
+    // Application form events (delegated to applications.js via window scope)
+    document.getElementById('add-app-btn').addEventListener('click', window.showAddApplicationForm);
+    document.getElementById('cancel-app-btn').addEventListener('click', window.hideAddApplicationForm);
+    document.getElementById('application-form').addEventListener('submit', window.addApplication);
+    document.getElementById('filter-applications').addEventListener('input', window.filterAndRenderApplications);
+    // Ensure this listener is correctly set for the view toggle
+    document.getElementById('view-toggle').addEventListener('change', window.toggleApplicationView);
+    document.getElementById('cv-file').addEventListener('change', window.handleCvFileUpload);
+
+
+    // Profile form events (delegated to profile.js via window scope)
+    document.getElementById('profile-form').addEventListener('submit', window.saveProfile);
+    document.getElementById('add-education-btn').addEventListener('click', window.addEducationField);
+    document.getElementById('add-experience-btn').addEventListener('click', window.addExperienceField);
+    document.getElementById('add-skill-btn').addEventListener('click', window.addSkillField);
+    document.getElementById('add-language-btn').addEventListener('click', window.addLanguageField);
+    document.getElementById('add-certification-btn').addEventListener('click', window.addCertificationField);
+    document.getElementById('profile-cv-file').addEventListener('change', window.handleProfileCvUpload);
+
+
+    // AI Tools event listeners (delegated to ai_services_frontend.js via window scope)
+    document.getElementById('estimate-chance-btn').addEventListener('click', window.estimateJobChance);
+    document.getElementById('tune-cv-btn').addEventListener('click', window.tuneCv);
+    document.getElementById('generate-cover-letter-btn').addEventListener('click', window.generateCoverLetter);
+    document.getElementById('qa-chat-send-btn').addEventListener('click', window.sendInterviewChatMessage);
+    document.getElementById('qa-chat-input').addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
+            window.sendInterviewChatMessage();
+        }
+    });
+    document.getElementById('extract-skills-btn').addEventListener('click', window.extractJobSkills);
+    document.getElementById('craft-questions-btn').addEventListener('click', window.craftInterviewQuestions);
+    document.getElementById('research-company-btn').addEventListener('click', window.researchCompanyWebsite);
+    document.getElementById('generate-about-me-btn').addEventListener('click', window.generateAboutMeAnswer);
+    document.getElementById('fill-profile-btn').addEventListener('click', window.fillProfileFromResumeAI);
+
+
+    // Calendar events (delegated to calendar.js via window scope)
+    document.getElementById('prev-month-btn')?.addEventListener('click', () => window.changeMonth(-1));
+    document.getElementById('next-month-btn')?.addEventListener('click', () => window.changeMonth(1));
+    document.getElementById('add-interview-btn')?.addEventListener('click', window.showInterviewFormModal);
+    document.getElementById('interview-form')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        await window.saveInterview(); // Ensure saveInterview is called from window
+    });
+
+    // Dashboard events (delegated to dashboard.js via window scope)
+    document.getElementById('dashboard-month-select').addEventListener('change', function() {
+        const [year, month] = this.value.split('-').map(Number);
+        window.currentDashboardDate = new Date(year, month - 1, 1); // Update global from dashboard.js
+        window.loadDashboardData(); // Call dashboard.js function
+    });
+
+    // Dashboard view toggle (delegated to dashboard.js via window scope)
+    document.getElementById('dashboard-view-toggle').addEventListener('change', function() {
+        window.currentDashboardView = this.value; // Update global from dashboard.js
+        const monthSelector = document.getElementById('dashboard-month-selector');
+        if (window.currentDashboardView === 'monthly') {
+            monthSelector.style.display = 'block';
+        } else {
+            monthSelector.style.display = 'none';
+        }
+        window.loadDashboardData(); // Call dashboard.js function
+    });
+
+    // AI Tools Dropdown menu functionality
     const aiToolsDropdown = document.getElementById('ai-tools-dropdown');
-    if (aiToolsDropdown) {
+    if (aiToolsDropdown) { // Check if element exists
         aiToolsDropdown.addEventListener('click', function(event) {
-            console.log('DEBUG: AI Tools Dropdown element click listener triggered.');
-            this.classList.toggle('active'); // Toggle dropdown visibility
-            event.stopPropagation(); // Prevent document click from closing it immediately
+            this.classList.toggle('active'); // Toggle 'active' class on click
+            event.stopPropagation(); // Prevent click from bubbling up and closing immediately
+            // When AI Tools dropdown is clicked, ensure the main AI Tools tab is active
+            // Find the actual AI Tools tab element by its data-tab attribute
+            const aiToolsTabElement = document.querySelector('.nav-tab[data-tab="ai-tools"]');
+            if (aiToolsTabElement) {
+                window.showTab('ai-tools', aiToolsTabElement); // Pass the actual AI Tools tab element
+            } else {
+                console.error("AI Tools tab element not found for showTab call.");
+            }
         });
-    } else {
-        console.error('ERROR: AI Tools Dropdown element not found.');
     }
 
     // Close dropdown if clicked outside
-    document.addEventListener('click', function(event) {
-        if (aiToolsDropdown && aiToolsDropdown.classList && !aiToolsDropdown.contains(event.target)) {
+    window.addEventListener('click', function(event) {
+        if (aiToolsDropdown && !aiToolsDropdown.contains(event.target)) {
             aiToolsDropdown.classList.remove('active');
         }
     });
 
-    // Handle clicks on AI service links within the dropdown
-    document.querySelectorAll('.dropdown-content a').forEach(link => {
-        link.addEventListener('click', function(event) {
+    // Handle clicks on dropdown items to show specific AI service sections
+    document.querySelectorAll('.dropdown-content a').forEach(item => {
+        item.addEventListener('click', function(event) {
             event.preventDefault();
-            const serviceId = this.dataset.aiService;
-            // Explicitly call through window object
-            if (typeof window.showAiServicePage === 'function') {
-                window.showAiServicePage(serviceId);
+            const serviceId = this.getAttribute('data-ai-service');
+            // Ensure window.showAiServiceSection is available before calling
+            if (typeof window.showAiServiceSection === 'function') {
+                window.showAiServiceSection(serviceId); // Function to show the specific AI section
             } else {
-                console.error('ERROR: window.showAiServicePage is not defined.');
-                showAlert('An internal error occurred: AI service display function not found.', 'error');
-                return;
+                console.error("window.showAiServiceSection is not a function. ai_services_frontend.js might not be loaded or exposed correctly.");
+                window.showAlert("AI services not fully loaded. Please refresh.", "error");
             }
 
-            // Also switch to the AI Tools tab if not already there
-            if (allNavTabs.length > 0) {
-                for (const t of allNavTabs) {
-                    if (t && t.classList) {
-                        t.classList.remove('active');
-                    } else {
-                        console.error('ERROR: Encountered invalid nav tab element in dropdown click handler:', t);
-                    }
-                }
-            }
-            document.querySelectorAll('.tab-content').forEach(content => {
-                if (content && content.classList) {
-                    content.classList.remove('active');
-                } else {
-                    console.error('ERROR: Encountered invalid tab content element in dropdown click handler:', content);
-                }
-            });
-            const aiToolsTab = document.querySelector('.nav-tab[data-tab="ai-tools"]');
-            if (aiToolsTab && aiToolsTab.classList) {
-                aiToolsTab.classList.add('active');
-            } else {
-                console.error('ERROR: AI Tools tab element not found or invalid:', aiToolsTab);
-            }
-            const aiToolsContent = document.getElementById('ai-tools');
-            if (aiToolsContent && aiToolsContent.classList) {
-                aiToolsContent.classList.add('active');
-            } else {
-                console.error('ERROR: AI Tools content element not found or invalid:', aiToolsContent);
-            }
-            if (aiToolsDropdown && aiToolsDropdown.classList) {
+            if (aiToolsDropdown) {
                 aiToolsDropdown.classList.remove('active'); // Close dropdown after selection
             }
         });
     });
+}
 
-    // Initial load of applications when the page loads
-    await loadApplications();
-    await loadProfile(); // Load profile data on startup
-    await loadDashboardData(); // Load dashboard data on startup
-    renderCalendar(); // Render calendar on startup
-    loadMonthlyInterviews(); // Load interviews for the current month on startup
 
-    // Event Listeners for AI Service Buttons
-    document.getElementById('estimate-chance-btn')?.addEventListener('click', estimateJobChance);
-    document.getElementById('tune-cv-btn')?.addEventListener('click', tuneCv);
-    document.getElementById('generate-cover-letter-btn')?.addEventListener('click', generateCoverLetter);
-    document.getElementById('qa-chat-send-btn')?.addEventListener('click', sendInterviewQaMessage);
-    document.getElementById('qa-chat-input')?.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            sendInterviewQaMessage();
-        }
-    });
-    document.getElementById('extract-skills-btn')?.addEventListener('click', extractSkills);
-    document.getElementById('craft-questions-btn')?.addEventListener('click', craftInterviewQuestions);
-    document.getElementById('research-company-btn')?.addEventListener('click', researchCompanyWebsite);
-    document.getElementById('generate-about-me-btn')?.addEventListener('click', generateAboutMeAnswer);
-    document.getElementById('fill-profile-btn')?.addEventListener('click', fillProfileFromResumeAI);
+// Function to show/hide tabs (moved from main.js, now in app.js as it's a core UI function)
+function showTab(tabName, clickedTab) {
+    // Remove 'active' from all tabs and content
+    document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
-    // Dashboard month selection listener
-    const dashboardMonthSelect = document.getElementById('dashboard-month-select');
-    if (dashboardMonthSelect) {
-        // Set initial value to current month
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = (today.getMonth() + 1).toString().padStart(2, '0');
-        dashboardMonthSelect.value = `${year}-${month}`;
-
-        dashboardMonthSelect.addEventListener('change', (event) => {
-            const [selectedYear, selectedMonth] = event.target.value.split('-').map(Number);
-            // Set currentDashboardDate to the first day of the selected month
-            currentDashboardDate = new Date(selectedYear, selectedMonth - 1, 1);
-            loadDashboardData();
-        });
+    // Add 'active' to the clicked tab and corresponding content
+    if (clickedTab) { // Ensure clickedTab exists before adding class
+        clickedTab.classList.add('active');
     }
-});
-
-// Function to load profile (can be called by other modules)
-async function loadProfile() {
-    try {
-        const response = await fetch('/api/profile');
-        if (!response.ok) {
-            // If profile doesn't exist yet, that's okay, we'll create a new one
-            if (response.status === 404) {
-                window.profile = {
-                    full_name: "", email: "", phone: "", location: "", summary: "",
-                    education: [], experience: [], skills: [], languages: [], certifications: [],
-                    linkedin_url: "", github_url: "", portfolio_url: "", cv_profile_file: null
-                };
-                console.log("No profile found, initializing a new empty profile.");
-                return;
-            }
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        window.profile = await response.json();
-        populateProfileForm(window.profile);
-    } catch (error) {
-        console.error('Error loading profile:', error);
-        showAlert('Error loading profile: ' + error.message, 'error');
+    const targetTabContent = document.getElementById(tabName);
+    if (targetTabContent) { // Ensure targetTabContent exists before adding class
+        targetTabContent.classList.add('active');
+    } else {
+        console.error(`Tab content with ID "${tabName}" not found.`);
     }
 }
 
-// Expose loadProfile to the window so other modules can call it
-window.loadProfile = loadProfile;
+// Expose core UI functions to the window object for modular access
+window.showTab = showTab;
+window.initializeEventListeners = initializeEventListeners; // Expose for potential re-initialization if needed

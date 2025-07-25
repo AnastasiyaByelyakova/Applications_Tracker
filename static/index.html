@@ -18,8 +18,8 @@
             <div class="nav-tab active" data-tab="applications">Applications</div>
             <div class="nav-tab" data-tab="profile">Profile</div>
 
-            <!-- AI Tools Dropdown - REMOVED data-tab attribute to prevent conflict with general tab logic -->
-            <div class="nav-tab dropdown" id="ai-tools-dropdown">
+            <!-- AI Tools Dropdown - ADDED data-tab="ai-tools" here -->
+            <div class="nav-tab dropdown" id="ai-tools-dropdown" data-tab="ai-tools">
                 AI Tools <span class="dropdown-arrow">&#9660;</span>
                 <div class="dropdown-content">
                     <a href="#" data-ai-service="estimate-chance">Estimate Job Chance</a>
@@ -44,7 +44,7 @@
             <button id="add-app-btn" class="btn btn-primary mb-4">Add New Application</button>
 
             <div id="add-application-form" class="form-section" style="display: none;">
-                <h3>Add/Edit Application</h3>
+                <h3 id="application-form-title">Add New Application</h3> <!-- Added ID for dynamic title -->
                 <form id="application-form">
                     <input type="hidden" id="application-id"> <!-- Added hidden input for application ID -->
                     <div class="form-group">
@@ -79,12 +79,13 @@
                     <div class="form-group">
                         <label for="cv-file">Upload CV (for this application)</label>
                         <input type="file" id="cv-file" accept=".pdf,.doc,.docx">
+                        <span id="cv-file-name-display" style="display: none;"></span> <!-- To display selected/current CV file name -->
                     </div>
                     <div class="form-group">
                         <label for="cover-letter">Cover Letter Notes</label>
                         <textarea id="cover-letter" rows="3"></textarea>
                     </div>
-                    <button type="submit" class="btn btn-success">Save Application</button>
+                    <button type="submit" class="btn btn-success" id="save-application-btn">Save Application</button> <!-- Added ID for dynamic text -->
                     <button type="button" class="btn btn-secondary" id="cancel-app-btn">Cancel</button>
                 </form>
             </div>
@@ -115,6 +116,7 @@
                             <th onclick="sortTableApplications('company')">Company</th>
                             <th onclick="sortTableApplications('application_date')">Application Date</th>
                             <th>Status</th>
+                            <th>Job Link</th> <!-- New column for job link -->
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -562,10 +564,20 @@
             <p><strong>Company:</strong> <span id="modal-company"></span></p>
             <p><strong>Status:</strong> <span id="modal-status" class="status-badge"></span></p>
             <p><strong>Applied On:</strong> <span id="modal-application-date"></span></p>
-            <p><strong>Description:</strong> <span id="modal-description"></span></p>
+
+            <p><strong>Description:</strong></p>
+            <div class="text-scroll-area"> <!-- New wrapper for scrollable content -->
+                <div id="modal-description"></div> <!-- Changed from span to div -->
+            </div>
+
             <p><strong>Link:</strong> <a id="modal-link" href="#" target="_blank">View Job Posting</a></p>
             <p><strong>CV:</strong> <span id="modal-cv-file-name"></span> <a id="modal-cv-file-link" href="#" target="_blank">Download</a></p>
-            <p><strong>Cover Letter Notes:</strong> <span id="modal-cover-letter"></span></p>
+
+            <p><strong>Cover Letter Notes:</strong></p>
+            <div class="text-scroll-area"> <!-- New wrapper for scrollable content -->
+                <div id="modal-cover-letter"></div> <!-- Changed from span to div -->
+            </div>
+
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="closeApplicationDetailModal()">Close</button>
             </div>

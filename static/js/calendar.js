@@ -395,7 +395,7 @@ async function saveInterview() {
             showAlert('Interview saved successfully!', 'success');
             hideInterviewFormModal();
             await loadMonthlyInterviews(); // Reload interviews to update calendar and list
-            loadDashboardData(); // Also update dashboard
+            window.loadDashboardData(); // Also update dashboard (ensure this is exposed globally in dashboard.js)
         } else {
             const errorData = await response.json();
             throw new Error(errorData.detail || 'Failed to save interview.');
@@ -420,7 +420,7 @@ function deleteInterview(interviewId) {
             if (response.ok) {
                 showAlert('Interview deleted successfully!', 'success');
                 await loadMonthlyInterviews(); // Reload interviews to update calendar and list
-                loadDashboardData(); // Also update dashboard
+                window.loadDashboardData(); // Also update dashboard
             } else {
                 const errorData = await response.json();
                 throw new Error(errorData.detail || 'Failed to delete interview.');
@@ -489,26 +489,27 @@ function sortTableInterviews(column) {
 
 
 // --- Event Listeners for Calendar Page ---
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('prev-month-btn')?.addEventListener('click', () => {
-        currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
-        renderCalendar();
-        loadMonthlyInterviews();
-    });
+// Moved to app.js for centralized initialization and to ensure window.loadMonthlyInterviews is ready.
+// document.addEventListener('DOMContentLoaded', () => {
+//     document.getElementById('prev-month-btn')?.addEventListener('click', () => {
+//         currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+//         renderCalendar();
+//         loadMonthlyInterviews();
+//     });
 
-    document.getElementById('next-month-btn')?.addEventListener('click', () => {
-        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
-        renderCalendar();
-        loadMonthlyInterviews();
-    });
+//     document.getElementById('next-month-btn')?.addEventListener('click', () => {
+//         currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+//         renderCalendar();
+//         loadMonthlyInterviews();
+//     });
 
-    document.getElementById('add-interview-btn')?.addEventListener('click', () => showInterviewFormModal());
+//     document.getElementById('add-interview-btn')?.addEventListener('click', () => showInterviewFormModal());
 
-    document.getElementById('interview-form')?.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        await saveInterview();
-    });
-});
+//     document.getElementById('interview-form')?.addEventListener('submit', async (event) => {
+//         event.preventDefault();
+//         await saveInterview();
+//     });
+// });
 
 // Expose functions to the global scope for app.js and HTML
 window.renderCalendar = renderCalendar;
@@ -519,3 +520,9 @@ window.showInterviewDetailModal = showInterviewDetailModal;
 window.hideInterviewDetailModal = hideInterviewDetailModal;
 window.deleteInterview = deleteInterview;
 window.sortTableInterviews = sortTableInterviews;
+window.saveInterview = saveInterview; // Expose saveInterview globally
+window.changeMonth = (delta) => { // Expose changeMonth for prev/next buttons
+    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+    renderCalendar();
+    loadMonthlyInterviews();
+};

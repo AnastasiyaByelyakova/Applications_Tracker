@@ -1,8 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone  # Import timezone
 from enum import Enum
-
 
 class ApplicationStatus(str, Enum):
     APPLIED = "Applied"
@@ -21,13 +20,15 @@ class JobApplication(BaseModel):
     id: Optional[str] = None
     job_title: str
     company: str
-    description: str
-    link: str
-    application_date: datetime = Field(default_factory=datetime.now)
+    description: Optional[str] = None  # Made optional as it might be empty
+    link: Optional[str] = None  # Made optional as it might be empty
+    # Use datetime.utcnow() for consistent UTC timestamps
+    application_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     status: ApplicationStatus = ApplicationStatus.APPLIED
     cv_file: Optional[str] = None
     cover_letter: Optional[str] = None
-    last_updated: datetime = Field(default_factory=datetime.now)  # Added last_updated field
+    # Use datetime.utcnow() for consistent UTC timestamps
+    last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Config:
         use_enum_values = True
@@ -73,7 +74,6 @@ class UserProfile(BaseModel):
 
 class Interview(BaseModel):
     id: Optional[str] = None
-    # Removed job_application_id
     interview_title: str
     start_datetime: datetime
     end_datetime: datetime

@@ -1,668 +1,478 @@
-// Global variable to store chat history for the Interview Q&A chatbot
-let interviewQaChatHistory = [];
-
-/**
- * Shows a specific AI service page and hides others.
- * @param {string} serviceId The ID of the AI service section to show (e.g., 'estimate-chance').
- */
-function showAiServicePage(serviceId) {
-    // Hide the initial intro message
-    document.getElementById('ai-tools-intro-message').style.display = 'none';
-
-    // Hide all AI service pages
+// Function to show a specific AI service section
+function showAiServiceSection(serviceId) {
+    // Hide all AI service sections
     document.querySelectorAll('.ai-service-page').forEach(page => {
         page.style.display = 'none';
     });
+    // Hide the intro message
+    document.getElementById('ai-tools-intro-message').style.display = 'none';
 
-    // Show the requested AI service page
-    const targetPage = document.getElementById(`ai-service-${serviceId}`);
-    if (targetPage) {
-        targetPage.style.display = 'block';
+    // Show the requested AI service section
+    const targetSection = document.getElementById(`ai-service-${serviceId}`);
+    if (targetSection) {
+        targetSection.style.display = 'block';
     } else {
-        showAlert('AI service page not found!', 'error');
+        window.showAlert('AI service section not found.', 'error');
+        document.getElementById('ai-tools-intro-message').style.display = 'block'; // Show intro if target not found
     }
+}
 
-    // Reset specific AI service states if needed when switching
-    if (serviceId === 'interview-qa') {
-        resetInterviewQaChat();
-    }
-    // You can add more resets here for other services if they maintain state
+// Expose this function globally
+window.showAiServiceSection = showAiServiceSection;
+
+
+/**
+ * Helper function to get AI provider and API key from a given section.
+ * @param {string} sectionIdPrefix The prefix for the section's IDs (e.g., 'chance', 'cv').
+ * @returns {object} An object containing aiProvider and apiKey.
+ */
+function getAiConfig(sectionIdPrefix) {
+    const aiProvider = document.getElementById(`ai-provider-${sectionIdPrefix}`).value;
+    const apiKey = document.getElementById(`api-key-${sectionIdPrefix}`).value;
+    return { aiProvider, apiKey };
 }
 
 /**
- * Resets the Interview Q&A chatbot state.
+ * Helper function to show loading indicator and hide result box.
+ * @param {string} loadingId The ID of the loading indicator div.
+ * @param {string} resultId The ID of the result div.
  */
-function resetInterviewQaChat() {
-    interviewQaChatHistory = [];
+function showLoading(loadingId, resultId) {
+    document.getElementById(loadingId).style.display = 'flex';
+    document.getElementById(resultId).style.display = 'none';
+    document.getElementById(resultId).innerHTML = ''; // Clear previous result
+}
+
+/**
+ * Helper function to hide loading indicator and show result box.
+ * @param {string} loadingId The ID of the loading indicator div.
+ * @param {string} resultId The ID of the result div.
+ * @param {string} content The HTML content to put in the result div.
+ */
+function hideLoadingShowResult(loadingId, resultId, content) {
+    document.getElementById(loadingId).style.display = 'none';
+    const resultDiv = document.getElementById(resultId);
+    resultDiv.innerHTML = content;
+    resultDiv.style.display = 'block';
+}
+
+/**
+ * Estimates job chance based on job description and user profile.
+ */
+async function estimateJobChance() {
+    const jobDescription = document.getElementById('job-desc-chance').value;
+    const { aiProvider, apiKey } = getAiConfig('chance');
+
+    if (!jobDescription || !apiKey) {
+        window.showAlert('Please provide job description and API Key.', 'error');
+        return;
+    }
+
+    // Ensure window.profile is available and not empty
+    if (!window.profile || Object.keys(window.profile).length === 0) {
+        window.showAlert('Your profile is empty. Please fill out your profile first.', 'warning');
+        return;
+    }
+
+    showLoading('chance-loading', 'chance-result');
+
+    try {
+        const response = await fetch('/api/ai/estimate-chance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                job_description: jobDescription,
+                profile: JSON.stringify(window.profile), // Send profile as JSON string
+                ai_provider: aiProvider,
+                api_key: apiKey
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to estimate job chance.');
+        }
+
+        const data = await response.json();
+        const formattedResult = window.formatAiResultToHtml(data.result);
+        hideLoadingShowResult('chance-loading', 'chance-result', formattedResult);
+        window.showAlert('Job chance estimated successfully!', 'success');
+    } catch (error) {
+        console.error('Error estimating job chance:', error);
+        hideLoadingShowResult('chance-loading', 'chance-result', `<p class="text-error">Error: ${error.message}</p>`);
+        window.showAlert('Failed to estimate job chance. ' + error.message, 'error');
+    }
+}
+
+/**
+ * Tunes CV for a specific job description.
+ */
+async function tuneCv() {
+    const jobDescription = document.getElementById('job-desc-cv').value;
+    const { aiProvider, apiKey } = getAiConfig('cv');
+
+    if (!jobDescription || !apiKey) {
+        window.showAlert('Please provide job description and API Key.', 'error');
+        return;
+    }
+
+    if (!window.profile || Object.keys(window.profile).length === 0) {
+        window.showAlert('Your profile is empty. Please fill out your profile first.', 'warning');
+        return;
+    }
+
+    showLoading('cv-loading', 'cv-result');
+
+    try {
+        const response = await fetch('/api/ai/tune-cv', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                job_description: jobDescription,
+                profile: JSON.stringify(window.profile),
+                ai_provider: aiProvider,
+                api_key: apiKey
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to tune CV.');
+        }
+
+        const data = await response.json();
+        const formattedResult = window.formatAiResultToHtml(data.result);
+        hideLoadingShowResult('cv-loading', 'cv-result', formattedResult);
+        window.showAlert('CV tuned successfully!', 'success');
+    } catch (error) {
+        console.error('Error tuning CV:', error);
+        hideLoadingShowResult('cv-loading', 'cv-result', `<p class="text-error">Error: ${error.message}</p>`);
+        window.showAlert('Failed to tune CV. ' + error.message, 'error');
+    }
+}
+
+/**
+ * Generates a cover letter.
+ */
+async function generateCoverLetter() {
+    const jobDescription = document.getElementById('job-desc-cover-letter').value;
+    const { aiProvider, apiKey } = getAiConfig('cover-letter');
+
+    if (!jobDescription || !apiKey) {
+        window.showAlert('Please provide job description and API Key.', 'error');
+        return;
+    }
+
+    if (!window.profile || Object.keys(window.profile).length === 0) {
+        window.showAlert('Your profile is empty. Please fill out your profile first.', 'warning');
+        return;
+    }
+
+    showLoading('cover-letter-loading', 'cover-letter-result');
+
+    try {
+        const response = await fetch('/api/ai/generate-cover-letter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                job_description: jobDescription,
+                profile: JSON.stringify(window.profile),
+                ai_provider: aiProvider,
+                api_key: apiKey
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to generate cover letter.');
+        }
+
+        const data = await response.json();
+        const formattedResult = window.formatAiResultToHtml(data.result);
+        hideLoadingShowResult('cover-letter-loading', 'cover-letter-result', formattedResult);
+        window.showAlert('Cover letter generated successfully!', 'success');
+    } catch (error) {
+        console.error('Error generating cover letter:', error);
+        hideLoadingShowResult('cover-letter-loading', 'cover-letter-result', `<p class="text-error">Error: ${error.message}</p>`);
+        window.showAlert('Failed to generate cover letter. ' + error.message, 'error');
+    }
+}
+
+// Chat history for Interview Q&A
+let interviewChatHistory = [];
+
+/**
+ * Sends a message in the interview Q&A chat.
+ */
+async function sendInterviewChatMessage() {
+    const chatInput = document.getElementById('qa-chat-input');
     const chatDisplay = document.getElementById('qa-chat-display');
-    chatDisplay.innerHTML = '<div class="chat-message bot-message">Hello! I\'m your interview practice bot. Tell me a job title, and I\'ll ask you some questions.</div>';
-    document.getElementById('qa-chat-input').value = '';
-    document.getElementById('job-title-qa').value = '';
-    document.getElementById('qa-loading').style.display = 'none';
+    const jobTitle = document.getElementById('job-title-qa').value;
+    const { aiProvider, apiKey } = getAiConfig('qa');
+
+    const userMessageText = chatInput.value.trim();
+    if (!userMessageText) return;
+
+    if (!jobTitle) {
+        window.showAlert('Please enter a Job Title for context.', 'warning');
+        return;
+    }
+    if (!apiKey) {
+        window.showAlert('Please provide an API Key.', 'error');
+        return;
+    }
+    if (!window.profile || Object.keys(window.profile).length === 0) {
+        window.showAlert('Your profile is empty. Please fill out your profile first.', 'warning');
+        return;
+    }
+
+    // Add user message to display and history
+    appendChatMessage(userMessageText, 'user');
+    interviewChatHistory.push({ role: 'user', content: userMessageText });
+    chatInput.value = ''; // Clear input
+
+    showLoading('qa-loading', 'qa-result-placeholder'); // qa-result-placeholder is just a dummy, result goes to chatDisplay
+
+    try {
+        const response = await fetch('/api/ai/interview-qa', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                job_title: jobTitle,
+                profile: JSON.stringify(window.profile),
+                chat_history: JSON.stringify(interviewChatHistory), // Send full history
+                ai_provider: aiProvider,
+                api_key: apiKey
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to get AI response.');
+        }
+
+        const data = await response.json();
+        const aiResponseText = data.result;
+        appendChatMessage(aiResponseText, 'bot');
+        interviewChatHistory.push({ role: 'assistant', content: aiResponseText }); // Add AI response to history
+
+        document.getElementById('qa-loading').style.display = 'none'; // Hide loading
+        chatDisplay.scrollTop = chatDisplay.scrollHeight; // Scroll to bottom
+    } catch (error) {
+        console.error('Error in interview chat:', error);
+        document.getElementById('qa-loading').style.display = 'none'; // Hide loading
+        appendChatMessage(`Error: ${error.message}`, 'bot'); // Show error in chat
+        window.showAlert('Error in interview chat: ' + error.message, 'error');
+    }
 }
 
 /**
  * Appends a message to the chat display.
- * @param {string} message The message content.
+ * @param {string} message The message text.
  * @param {string} sender 'user' or 'bot'.
  */
 function appendChatMessage(message, sender) {
     const chatDisplay = document.getElementById('qa-chat-display');
     const messageDiv = document.createElement('div');
-    messageDiv.className = `chat-message ${sender}-message`;
-    // Use innerHTML to render potentially formatted messages (e.g., from AI)
-    messageDiv.innerHTML = message;
+    messageDiv.classList.add('chat-message', `${sender}-message`);
+    messageDiv.innerHTML = window.formatAiResultToHtml(message); // Format AI response as Markdown
     chatDisplay.appendChild(messageDiv);
-    chatDisplay.scrollTop = chatDisplay.scrollHeight; // Scroll to bottom
-}
-
-// --- AI Service Implementations ---
-
-/**
- * Handles the "Estimate Job Chance" AI service request.
- */
-async function estimateJobChance() {
-    const jobDescription = document.getElementById('job-desc-chance').value;
-    const aiProvider = document.getElementById('ai-provider-chance').value;
-    const apiKey = document.getElementById('api-key-chance').value;
-    const chanceLoading = document.getElementById('chance-loading');
-    const chanceResult = document.getElementById('chance-result');
-
-    chanceResult.style.display = 'none';
-    chanceLoading.style.display = 'block';
-
-    if (!jobDescription || !apiKey) {
-        showAlert('Please provide a job description and your API key.', 'warning');
-        chanceLoading.style.display = 'none';
-        return;
-    }
-
-    try {
-        // Ensure profile data is loaded before sending
-        await loadProfile();
-
-        // IMPORTANT: Check if window.profile is properly loaded
-        if (!window.profile || Object.keys(window.profile).length === 0) {
-            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
-            chanceLoading.style.display = 'none';
-            return;
-        }
-
-        // CORRECTED: Send as JSON payload
-        const requestBody = {
-            job_description: jobDescription,
-            profile: window.profile, // Use the globally loaded profile
-            ai_provider: aiProvider,
-            api_key: apiKey
-        };
-        console.log(requestBody);
-        const response = await fetch('/api/ai/estimate-chance', { // CORRECTED API endpoint path
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
-            body: JSON.stringify(requestBody) // Stringify the JSON object
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            const formattedHtml = formatAiResultToHtml(data.result);
-            openHtmlResultWindow('Job Chance Estimation Result', formattedHtml);
-            showAlert('Job chance estimated successfully! Result opened in a new window.', 'success');
-        } else {
-            let errorMessage = 'Failed to estimate job chance.';
-            try {
-                const errorData = await response.json();
-                if (errorData.detail && Array.isArray(errorData.detail)) {
-                    errorMessage = errorData.detail.map(err => {
-                        const loc = err.loc ? err.loc.join('.') : 'unknown';
-                        return `${loc}: ${err.msg}`;
-                    }).join('\n');
-                } else if (errorData.detail) {
-                    errorMessage = errorData.detail;
-                } else {
-                    errorMessage = await response.text(); // Fallback to text if no JSON detail
-                }
-            } catch (parseError) {
-                errorMessage = await response.text(); // Use raw text if JSON parsing fails
-            }
-            throw new Error(errorMessage);
-        }
-    } catch (error) {
-        console.error('Error estimating job chance:', error);
-        showAlert('Error estimating job chance: ' + error.message, 'error');
-        chanceResult.innerHTML = `<h4>Error:</h4><p>${error.message}</p>`;
-        chanceResult.style.display = 'block';
-    } finally {
-        chanceLoading.style.display = 'none';
-    }
+    chatDisplay.scrollTop = chatDisplay.scrollHeight; // Auto-scroll to latest message
 }
 
 /**
- * Handles the "Tune CV for Job Description" AI service request.
+ * Extracts key skills from job description.
  */
-async function tuneCv() {
-    const jobDescription = document.getElementById('job-desc-cv').value;
-    const aiProvider = document.getElementById('ai-provider-cv').value;
-    const apiKey = document.getElementById('api-key-cv').value;
-    const cvLoading = document.getElementById('cv-loading');
-    const cvResult = document.getElementById('cv-result');
-
-    cvResult.style.display = 'none';
-    cvLoading.style.display = 'block';
-
-    if (!jobDescription || !apiKey) {
-        showAlert('Please provide a job description and your API key.', 'warning');
-        cvLoading.style.display = 'none';
-        return;
-    }
-
-    try {
-        await loadProfile();
-        if (!window.profile || Object.keys(window.profile).length === 0) {
-            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
-            cvLoading.style.display = 'none';
-            return;
-        }
-        // CORRECTED: Send as JSON payload
-        const requestBody = {
-            job_description: jobDescription,
-            profile: window.profile,
-            ai_provider: aiProvider,
-            api_key: apiKey
-        };
-        const response = await fetch('/api/ai/tune-cv', { // CORRECTED API endpoint path
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
-            body: JSON.stringify(requestBody) // Stringify the JSON object
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            const formattedHtml = formatAiResultToHtml(data.result);
-            openHtmlResultWindow('Tuned CV Suggestions', formattedHtml);
-            showAlert('CV tuned successfully! Result opened in a new window.', 'success');
-        } else {
-            let errorMessage = 'Failed to tune CV.';
-            try {
-                const errorData = await response.json();
-                if (errorData.detail && Array.isArray(errorData.detail)) {
-                    errorMessage = errorData.detail.map(err => {
-                        const loc = err.loc ? err.loc.join('.') : 'unknown';
-                        return `${loc}: ${err.msg}`;
-                    }).join('\n');
-                } else if (errorData.detail) {
-                    errorMessage = errorData.detail;
-                } else {
-                    errorMessage = await response.text();
-                }
-            } catch (parseError) {
-                errorMessage = await response.text();
-            }
-            throw new Error(errorMessage);
-        }
-    } catch (error) {
-        console.error('Error tuning CV:', error);
-        showAlert('Error tuning CV: ' + error.message, 'error');
-        cvResult.innerHTML = `<h4>Error:</h4><p>${error.message}</p>`;
-        cvResult.style.display = 'block';
-    } finally {
-        cvLoading.style.display = 'none';
-    }
-}
-
-/**
- * Handles the "Cover Letter Writing" AI service request.
- */
-async function generateCoverLetter() {
-    const jobDescription = document.getElementById('job-desc-cover-letter').value;
-    const aiProvider = document.getElementById('ai-provider-cover-letter').value;
-    const apiKey = document.getElementById('api-key-cover-letter').value;
-    const loadingDiv = document.getElementById('cover-letter-loading');
-    const resultDiv = document.getElementById('cover-letter-result');
-
-    resultDiv.style.display = 'none';
-    loadingDiv.style.display = 'block';
-
-    if (!jobDescription || !apiKey) {
-        showAlert('Please provide a job description and your API key.', 'warning');
-        loadingDiv.style.display = 'none';
-        return;
-    }
-
-    try {
-        await loadProfile();
-        if (!window.profile || Object.keys(window.profile).length === 0) {
-            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
-            loadingDiv.style.display = 'none';
-            return;
-        }
-        // This function was already correct, sending JSON payload
-        const requestBody = {
-            job_description: jobDescription,
-            profile: window.profile,
-            ai_provider: aiProvider,
-            api_key: apiKey
-        };
-        const response = await fetch('/api/ai/cover-letter', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
-            body: JSON.stringify(requestBody) // Stringify the JSON object
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            const formattedHtml = formatAiResultToHtml(data.result);
-            openHtmlResultWindow('Generated Cover Letter', formattedHtml);
-            showAlert('Cover letter generated successfully! Result opened in a new window.', 'success');
-        } else {
-            let errorMessage = 'Failed to generate cover letter.';
-            try {
-                const errorData = await response.json();
-                if (errorData.detail && Array.isArray(errorData.detail)) {
-                    errorMessage = errorData.detail.map(err => {
-                        const loc = err.loc ? err.loc.join('.') : 'unknown';
-                        return `${loc}: ${err.msg}`;
-                    }).join('\n');
-                } else if (errorData.detail) {
-                    errorMessage = errorData.detail;
-                } else {
-                    errorMessage = await response.text();
-                }
-            } catch (parseError) {
-                errorMessage = await response.text();
-            }
-            throw new Error(errorMessage);
-        }
-    } catch (error) {
-        console.error('Error generating cover letter:', error);
-        showAlert('Error generating cover letter: ' + error.message, 'error');
-        resultDiv.innerHTML = `<h4>Error:</h4><p>${error.message}</p>`;
-        resultDiv.style.display = 'block';
-    } finally {
-        loadingDiv.style.display = 'none';
-    }
-}
-
-/**
- * Handles the "Interview Q&A Practice" AI service chat.
- */
-async function sendInterviewQaMessage() {
-    const chatInput = document.getElementById('qa-chat-input');
-    const jobTitle = document.getElementById('job-title-qa').value;
-    const aiProvider = document.getElementById('ai-provider-qa').value;
-    const apiKey = document.getElementById('api-key-qa').value;
-    const loadingDiv = document.getElementById('qa-loading');
-
-    const userMessage = chatInput.value.trim();
-    if (!userMessage) return;
-
-    appendChatMessage(userMessage, 'user');
-    chatInput.value = '';
-    loadingDiv.style.display = 'flex';
-
-    interviewQaChatHistory.push({ role: "user", content: userMessage });
-
-    if (!apiKey) {
-        showAlert('Please provide your AI provider API key.', 'warning');
-        loadingDiv.style.display = 'none';
-        return;
-    }
-
-    try {
-        await loadProfile();
-        if (!window.profile || Object.keys(window.profile).length === 0) {
-            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
-            loadingDiv.style.display = 'none';
-            return;
-        }
-        // This function was already correct, sending JSON payload
-        const requestBody = {
-            job_title: jobTitle,
-            profile: window.profile,
-            chat_history: interviewQaChatHistory,
-            ai_provider: aiProvider,
-            api_key: apiKey
-        };
-        const response = await fetch('/api/ai/interview-qa', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            const botResponse = data.response;
-            const formattedBotResponse = formatAiResultToHtml(botResponse);
-            appendChatMessage(formattedBotResponse, 'bot');
-            interviewQaChatHistory.push({ role: "assistant", content: botResponse });
-        } else {
-            let errorMessage = 'Failed to get AI response.';
-            try {
-                const errorData = await response.json();
-                if (errorData.detail && Array.isArray(errorData.detail)) {
-                    errorMessage = errorData.detail.map(err => {
-                        const loc = err.loc ? err.loc.join('.') : 'unknown';
-                        return `${loc}: ${err.msg}`;
-                    }).join('\n');
-                } else if (errorData.detail) {
-                    errorMessage = errorData.detail;
-                } else {
-                    errorMessage = await response.text();
-                }
-            } catch (parseError) {
-                errorMessage = await response.text();
-            }
-            throw new Error(errorMessage);
-        }
-    } catch (error) {
-        console.error('Error in Interview Q&A:', error);
-        appendChatMessage('Error: ' + error.message, 'bot');
-    } finally {
-        loadingDiv.style.display = 'none';
-    }
-}
-
-/**
- * Handles the "Job Description Key Skill Extractor & Analyzer" AI service request.
- */
-async function extractSkills() {
+async function extractJobSkills() {
     const jobDescription = document.getElementById('job-desc-skill-extractor').value;
-    const aiProvider = document.getElementById('ai-provider-skill-extractor').value;
-    const apiKey = document.getElementById('api-key-skill-extractor').value;
-    const loadingDiv = document.getElementById('skill-extractor-loading');
-    const resultDiv = document.getElementById('skill-extractor-result');
-
-    resultDiv.style.display = 'none';
-    loadingDiv.style.display = 'block';
+    const { aiProvider, apiKey } = getAiConfig('skill-extractor');
 
     if (!jobDescription || !apiKey) {
-        showAlert('Please provide a job description and your API key.', 'warning');
-        loadingDiv.style.display = 'none';
+        window.showAlert('Please provide job description and API Key.', 'error');
         return;
     }
 
+    if (!window.profile || Object.keys(window.profile).length === 0) {
+        window.showAlert('Your profile is empty. Please fill out your profile first.', 'warning');
+        return;
+    }
+
+    showLoading('skill-extractor-loading', 'skill-extractor-result');
+
     try {
-        await loadProfile();
-        if (!window.profile || Object.keys(window.profile).length === 0) {
-            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
-            loadingDiv.style.display = 'none';
-            return;
-        }
-        // This function was already correct, sending JSON payload
-        const requestBody = {
-            job_description: jobDescription,
-            profile: window.profile,
-            ai_provider: aiProvider,
-            api_key: apiKey
-        };
-        const response = await fetch('/api/ai/skill-extractor', {
+        const response = await fetch('/api/ai/extract-skills', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
-            body: JSON.stringify(requestBody) // Stringify the JSON object
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                job_description: jobDescription,
+                profile: JSON.stringify(window.profile),
+                ai_provider: aiProvider,
+                api_key: apiKey
+            })
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            const formattedHtml = formatAiResultToHtml(data.result);
-            openHtmlResultWindow('Skill Extraction & Analysis Result', formattedHtml);
-            showAlert('Skills extracted and analyzed successfully! Result opened in a new window.', 'success');
-        } else {
-            let errorMessage = 'Failed to extract skills.';
-            try {
-                const errorData = await response.json();
-                if (errorData.detail && Array.isArray(errorData.detail)) {
-                    errorMessage = errorData.detail.map(err => {
-                        const loc = err.loc ? err.loc.join('.') : 'unknown';
-                        return `${loc}: ${err.msg}`;
-                    }).join('\n');
-                } else if (errorData.detail) {
-                    errorMessage = errorData.detail;
-                } else {
-                    errorMessage = await response.text();
-                }
-            } catch (parseError) {
-                errorMessage = await response.text();
-            }
-            throw new Error(errorMessage);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to extract skills.');
         }
+
+        const data = await response.json();
+        const formattedResult = window.formatAiResultToHtml(data.result);
+        hideLoadingShowResult('skill-extractor-loading', 'skill-extractor-result', formattedResult);
+        window.showAlert('Skills extracted successfully!', 'success');
     } catch (error) {
         console.error('Error extracting skills:', error);
-        showAlert('Error extracting skills: ' + error.message, 'error');
-        resultDiv.innerHTML = `<h4>Error:</h4><p>${error.message}</p>`;
-        resultDiv.style.display = 'block';
-    } finally {
-        loadingDiv.style.display = 'none';
+        hideLoadingShowResult('skill-extractor-loading', 'skill-extractor-result', `<p class="text-error">Error: ${error.message}</p>`);
+        window.showAlert('Failed to extract skills. ' + error.message, 'error');
     }
 }
 
 /**
- * Handles the "Craft Interview Questions for a Candidate" AI service request.
+ * Crafts interview questions.
  */
 async function craftInterviewQuestions() {
     const candidateInfo = document.getElementById('candidate-info-questions').value;
-    const aiProvider = document.getElementById('ai-provider-craft-questions').value;
-    const apiKey = document.getElementById('api-key-craft-questions').value;
-    const loadingDiv = document.getElementById('craft-questions-loading');
-    const resultDiv = document.getElementById('craft-questions-result');
-
-    resultDiv.style.display = 'none';
-    loadingDiv.style.display = 'block';
+    const { aiProvider, apiKey } = getAiConfig('craft-questions');
 
     if (!candidateInfo || !apiKey) {
-        showAlert('Please provide job description/candidate info and your API key.', 'warning');
-        loadingDiv.style.display = 'none';
+        window.showAlert('Please provide candidate information and API Key.', 'error');
         return;
     }
 
+    showLoading('craft-questions-loading', 'craft-questions-result');
+
     try {
-        // This function was already correct, sending JSON payload
-        const requestBody = {
-            candidate_info: candidateInfo,
-            ai_provider: aiProvider,
-            api_key: apiKey
-        };
-        const response = await fetch('/api/ai/craft-interview-questions', {
+        const response = await fetch('/api/ai/craft-questions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
-            body: JSON.stringify(requestBody) // Stringify the JSON object
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                candidate_info: candidateInfo,
+                ai_provider: aiProvider,
+                api_key: apiKey
+            })
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            const formattedHtml = formatAiResultToHtml(data.result);
-            openHtmlResultWindow('Generated Interview Questions', formattedHtml);
-            showAlert('Interview questions generated successfully! Result opened in a new window.', 'success');
-        } else {
-            let errorMessage = 'Failed to craft interview questions.';
-            try {
-                const errorData = await response.json();
-                if (errorData.detail && Array.isArray(errorData.detail)) {
-                    errorMessage = errorData.detail.map(err => {
-                        const loc = err.loc ? err.loc.join('.') : 'unknown';
-                        return `${loc}: ${err.msg}`;
-                    }).join('\n');
-                } else if (errorData.detail) {
-                    errorMessage = errorData.detail;
-                } else {
-                    errorMessage = await response.text();
-                }
-            } catch (parseError) {
-                errorMessage = await response.text();
-            }
-            throw new Error(errorMessage);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to craft questions.');
         }
+
+        const data = await response.json();
+        const formattedResult = window.formatAiResultToHtml(data.result);
+        hideLoadingShowResult('craft-questions-loading', 'craft-questions-result', formattedResult);
+        window.showAlert('Interview questions crafted successfully!', 'success');
     } catch (error) {
-        console.error('Error crafting interview questions:', error);
-        showAlert('Error crafting interview questions: ' + error.message, 'error');
-        resultDiv.innerHTML = `<h4>Error:</h4><p>${error.message}</p>`;
-        resultDiv.style.display = 'block';
-    } finally {
-        loadingDiv.style.display = 'none';
+        console.error('Error crafting questions:', error);
+        hideLoadingShowResult('craft-questions-loading', 'craft-questions-result', `<p class="text-error">Error: ${error.message}</p>`);
+        window.showAlert('Failed to craft questions. ' + error.message, 'error');
     }
 }
 
 /**
- * Handles the "Company Website Research" AI service request.
+ * Researches company website.
  */
 async function researchCompanyWebsite() {
     const companyUrl = document.getElementById('company-url-research').value;
-    const aiProvider = document.getElementById('ai-provider-company-research').value;
-    const apiKey = document.getElementById('api-key-company-research').value;
-    const loadingDiv = document.getElementById('company-research-loading');
-    const resultDiv = document.getElementById('company-research-result');
-
-    resultDiv.style.display = 'none';
-    loadingDiv.style.display = 'block';
+    const { aiProvider, apiKey } = getAiConfig('company-research');
 
     if (!companyUrl || !apiKey) {
-        showAlert('Please provide a company URL and your API key.', 'warning');
-        loadingDiv.style.display = 'none';
+        window.showAlert('Please provide company URL and API Key.', 'error');
         return;
     }
 
+    showLoading('company-research-loading', 'company-research-result');
+
     try {
-        // This function was already correct, sending JSON payload
-        const requestBody = {
-            company_url: companyUrl,
-            ai_provider: aiProvider,
-            api_key: apiKey
-        };
         const response = await fetch('/api/ai/company-research', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
-            body: JSON.stringify(requestBody) // Stringify the JSON object
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                company_url: companyUrl,
+                ai_provider: aiProvider,
+                api_key: apiKey
+            })
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            const formattedHtml = formatAiResultToHtml(data.result);
-            openHtmlResultWindow('Company Research Result', formattedHtml);
-            showAlert('Company research completed successfully! Result opened in a new window.', 'success');
-        } else {
-            let errorMessage = 'Failed to research company.';
-            try {
-                const errorData = await response.json();
-                if (errorData.detail && Array.isArray(errorData.detail)) {
-                    errorMessage = errorData.detail.map(err => {
-                        const loc = err.loc ? err.loc.join('.') : 'unknown';
-                        return `${loc}: ${err.msg}`;
-                    }).join('\n');
-                } else if (errorData.detail) {
-                    errorMessage = errorData.detail;
-                } else {
-                    errorMessage = await response.text();
-                }
-            } catch (parseError) {
-                errorMessage = await response.text();
-            }
-            throw new Error(errorMessage);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to research company.');
         }
+
+        const data = await response.json();
+        const formattedResult = window.formatAiResultToHtml(data.result);
+        hideLoadingShowResult('company-research-loading', 'company-research-result', formattedResult);
+        window.showAlert('Company research completed successfully!', 'success');
     } catch (error) {
         console.error('Error researching company:', error);
-        showAlert('Error researching company: ' + error.message, 'error');
-        resultDiv.innerHTML = `<h4>Error:</h4><p>${error.message}</p>`;
-        resultDiv.style.display = 'block';
-    } finally {
-        loadingDiv.style.display = 'none';
+        hideLoadingShowResult('company-research-loading', 'company-research-result', `<p class="text-error">Error: ${error.message}</p>`);
+        window.showAlert('Failed to research company. ' + error.message, 'error');
     }
 }
 
 /**
- * Handles the "Tuned 'About Me' Answer" AI service request.
+ * Generates a tuned "About Me" answer.
  */
 async function generateAboutMeAnswer() {
     const jobDescription = document.getElementById('job-desc-about-me').value;
-    const aiProvider = document.getElementById('ai-provider-about-me').value;
-    const apiKey = document.getElementById('api-key-about-me').value;
-    const loadingDiv = document.getElementById('about-me-loading');
-    const resultDiv = document.getElementById('about-me-result');
-
-    resultDiv.style.display = 'none';
-    loadingDiv.style.display = 'block';
+    const { aiProvider, apiKey } = getAiConfig('about-me');
 
     if (!jobDescription || !apiKey) {
-        showAlert('Please provide a job description and your API key.', 'warning');
-        loadingDiv.style.display = 'none';
+        window.showAlert('Please provide job description and API Key.', 'error');
         return;
     }
 
+    if (!window.profile || Object.keys(window.profile).length === 0) {
+        window.showAlert('Your profile is empty. Please fill out your profile first.', 'warning');
+        return;
+    }
+
+    showLoading('about-me-loading', 'about-me-result');
+
     try {
-        await loadProfile();
-        if (!window.profile || Object.keys(window.profile).length === 0) {
-            showAlert('Your profile data is missing or empty. Please fill out your profile before using AI tools.', 'error');
-            loadingDiv.style.display = 'none';
-            return;
-        }
-        // This function was already correct, sending JSON payload
-        const requestBody = {
-            job_description: jobDescription,
-            profile: window.profile,
-            ai_provider: aiProvider,
-            api_key: apiKey
-        };
         const response = await fetch('/api/ai/about-me-answer', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }, // Explicitly set JSON header
-            body: JSON.stringify(requestBody) // Stringify the JSON object
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                job_description: jobDescription,
+                profile: JSON.stringify(window.profile),
+                ai_provider: aiProvider,
+                api_key: apiKey
+            })
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            const formattedHtml = formatAiResultToHtml(data.result);
-            openHtmlResultWindow('Tuned "About Me" Answer', formattedHtml);
-            showAlert('About Me" answer generated successfully! Result opened in a new window.', 'success');
-        } else {
-            let errorMessage = 'Failed to generate "About Me" answer.';
-            try {
-                const errorData = await response.json();
-                if (errorData.detail && Array.isArray(errorData.detail)) {
-                    errorMessage = errorData.detail.map(err => {
-                        const loc = err.loc ? err.loc.join('.') : 'unknown';
-                        return `${loc}: ${err.msg}`;
-                    }).join('\n');
-                } else if (errorData.detail) {
-                    errorMessage = errorData.detail;
-                } else {
-                    errorMessage = await response.text();
-                }
-            } catch (parseError) {
-                errorMessage = await response.text();
-            }
-            throw new Error(errorMessage);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to generate "About Me" answer.');
         }
+
+        const data = await response.json();
+        const formattedResult = window.formatAiResultToHtml(data.result);
+        hideLoadingShowResult('about-me-loading', 'about-me-result', formattedResult);
+        window.showAlert('"About Me" answer generated successfully!', 'success');
     } catch (error) {
         console.error('Error generating "About Me" answer:', error);
-        showAlert('Error generating "About Me" answer: ' + error.message, 'error');
-        resultDiv.innerHTML = `<h4>Error:</h4><p>${error.message}</p>`;
-        resultDiv.style.display = 'block';
-    } finally {
-        loadingDiv.style.display = 'none';
+        hideLoadingShowResult('about-me-loading', 'about-me-result', `<p class="text-error">Error: ${error.message}</p>`);
+        window.showAlert('Failed to generate "About Me" answer. ' + error.message, 'error');
     }
 }
 
 /**
- * Handles the "Fill Profile from Resume (AI)" AI service request.
- * This function correctly uses FormData because it involves a file upload.
+ * Fills profile from resume using AI.
  */
 async function fillProfileFromResumeAI() {
     const resumeFile = document.getElementById('resume-pdf-input').files[0];
-    const aiProvider = document.getElementById('ai-provider-fill-profile').value;
-    const apiKey = document.getElementById('api-key-fill-profile').value;
-    const fillProfileLoading = document.getElementById('fill-profile-loading');
-    const fillProfileResult = document.getElementById('fill-profile-result');
-
-    fillProfileResult.style.display = 'none';
-    fillProfileLoading.style.display = 'block';
+    const { aiProvider, apiKey } = getAiConfig('fill-profile');
 
     if (!resumeFile) {
-        showAlert('Please select a resume PDF file.', 'warning');
-        fillProfileLoading.style.display = 'none';
+        window.showAlert('Please upload a resume PDF file.', 'error');
         return;
     }
     if (!apiKey) {
-        showAlert('Please provide your API key.', 'warning');
-        fillProfileLoading.style.display = 'none';
+        window.showAlert('Please provide an API Key.', 'error');
         return;
     }
+
+    showLoading('fill-profile-loading', 'fill-profile-result');
 
     const formData = new FormData();
     formData.append('resume_file', resumeFile);
@@ -672,54 +482,41 @@ async function fillProfileFromResumeAI() {
     try {
         const response = await fetch('/api/ai/profile/fill-from-resume-ai', {
             method: 'POST',
-            body: formData // FormData is used here for file upload
+            body: formData
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            fillProfileResult.innerHTML = `<h4>Profile Filled Successfully!</h4><pre>${JSON.stringify(data.profile, null, 2)}</pre>`;
-            fillProfileResult.style.display = 'block';
-            showAlert('Profile filled successfully from resume!', 'success');
-            loadProfile(); // Reload profile data to update the form
-        } else {
-            let errorMessage;
-            try {
-                const errorData = await response.json();
-                if (errorData.detail && Array.isArray(errorData.detail)) {
-                    errorMessage = errorData.detail.map(err => {
-                        const loc = err.loc ? err.loc.join('.') : 'unknown';
-                        return `${loc}: ${err.msg}`;
-                    }).join('\n');
-                } else if (errorData.detail) {
-                    errorMessage = errorData.detail;
-                } else {
-                    errorMessage = await response.text();
-                }
-            } catch (parseError) {
-                errorMessage = await response.text();
-            }
-            throw new Error(errorMessage);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to fill profile from resume.');
         }
+
+        const data = await response.json();
+        const profileData = data.profile; // The backend returns the saved profile
+
+        // Update the frontend profile object and re-render the profile tab
+        window.profile = profileData;
+        window.populateProfileForm(); // Assuming populateProfileForm is exposed by profile.js
+
+        hideLoadingShowResult('fill-profile-loading', 'fill-profile-result', `<p class="text-success">Profile extracted and filled successfully!</p><pre>${JSON.stringify(profileData, null, 2)}</pre>`);
+        window.showAlert('Profile filled from resume successfully!', 'success');
     } catch (error) {
         console.error('Error filling profile from resume:', error);
-        fillProfileResult.innerHTML = `<h4>Error:</h4><p>${error.message}</p>`;
-        fillProfileResult.style.display = 'block';
-        showAlert('Error filling profile from resume: ' + error.message, 'error');
-    } finally {
-        document.getElementById('resume-pdf-input').value = '';
-        fillProfileLoading.style.display = 'none';
+        hideLoadingShowResult('fill-profile-loading', 'fill-profile-result', `<p class="text-error">Error: ${error.message}</p>`);
+        window.showAlert('Failed to fill profile from resume. ' + error.message, 'error');
     }
 }
 
 
-// Expose functions to the global scope for HTML event handlers and app.js
-window.showAiServicePage = showAiServicePage;
+// Expose functions to the global scope
 window.estimateJobChance = estimateJobChance;
 window.tuneCv = tuneCv;
 window.generateCoverLetter = generateCoverLetter;
-window.sendInterviewQaMessage = sendInterviewQaMessage;
-window.extractSkills = extractSkills;
+window.sendInterviewChatMessage = sendInterviewChatMessage;
+window.extractJobSkills = extractJobSkills;
 window.craftInterviewQuestions = craftInterviewQuestions;
 window.researchCompanyWebsite = researchCompanyWebsite;
 window.generateAboutMeAnswer = generateAboutMeAnswer;
 window.fillProfileFromResumeAI = fillProfileFromResumeAI;
+
+// Add a log to confirm this script has loaded and exposed its functions
+console.log("ai_services_frontend.js loaded and functions exposed.");
