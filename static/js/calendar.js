@@ -1,173 +1,125 @@
-// Global variable to keep track of the current month displayed in the calendar
-let currentCalendarDate = new Date();
+/**
+ * Handles calendar functionalities including rendering, interview scheduling, and data management.
+ */
 
-// Global array to store interviews fetched from the backend
+// Global variable to store interviews
 let interviews = [];
 
-// Chart instances for mini-calendars to allow for updates
-let miniCalendarCharts = {};
+// Global variable for the current month being displayed in the main calendar
+window.currentCalendarDate = new Date();
+
+/**
+ * Fetches interviews from the backend.
+ * @returns {Promise<Array>} A promise that resolves to an array of interview objects.
+ */
+async function fetchInterviews() {
+    console.log("Fetching interviews...");
+    try {
+        const response = await fetch('/api/interviews');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        interviews = data; // Update global interviews array
+        console.log("Interviews fetched successfully:", interviews);
+        return interviews;
+    } catch (error) {
+        console.error('Error fetching interviews:', error);
+        window.showAlert('Failed to load interviews.', 'error');
+        return [];
+    }
+}
 
 /**
  * Renders the main calendar grid for the current month.
  */
 async function renderCalendar() {
-    const calendarDaysGrid = document.getElementById('calendar-days-grid');
-    const currentMonthYearHeader = document.getElementById('current-month-year');
+    console.log("Rendering calendar...");
+    await fetchInterviews(); // Ensure interviews are loaded before rendering
 
-    calendarDaysGrid.innerHTML = ''; // Clear previous days
+    const monthYearDisplay = document.getElementById('current-month-year');
+    const daysGrid = document.getElementById('calendar-days-grid');
 
-    const year = currentCalendarDate.getFullYear();
-    const month = currentCalendarDate.getMonth(); // 0-indexed month
+    if (!monthYearDisplay || !daysGrid) {
+        console.error("Calendar elements (monthYearDisplay or daysGrid) not found in DOM.");
+        return;
+    }
 
-    // Set header text
-    currentMonthYearHeader.textContent = currentCalendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+    monthYearDisplay.textContent = window.currentCalendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+    daysGrid.innerHTML = `
+        <div class="calendar-day-header">Sun</div>
+        <div class="calendar-day-header">Mon</div>
+        <div class="calendar-day-header">Tue</div>
+        <div class="calendar-day-header">Wed</div>
+        <div class="calendar-day-header">Thu</div>
+        <div class="calendar-day-header">Fri</div>
+        <div class="calendar-day-header">Sat</div>
+    `; // Re-add headers
 
-    // Get the first day of the month
-    const firstDayOfMonth = new Date(year, month, 1);
-    // Get the last day of the month
-    const lastDayOfMonth = new Date(year, month + 1, 0);
+    const year = window.currentCalendarDate.getFullYear();
+    const month = window.currentCalendarDate.getMonth(); // 0-indexed
 
-    // Calculate the day of the week for the first day (0 for Sunday, 1 for Monday, etc.)
-    const startDayOfWeek = firstDayOfMonth.getDay();
+    // Get the first day of the month and the number of days in the month
+    const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 for Sunday, 1 for Monday, etc.
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    // Add empty divs for days before the 1st of the month to align correctly
-    for (let i = 0; i < startDayOfWeek; i++) {
-        const emptyDay = document.createElement('div');
-        emptyDay.classList.add('calendar-day', 'empty');
-        calendarDaysGrid.appendChild(emptyDay);
+    // Add empty divs for days before the 1st of the month
+    for (let i = 0; i < firstDayOfMonth; i++) {
+        daysGrid.innerHTML += '<div class="calendar-day empty"></div>';
     }
 
     // Add days of the month
-    for (let day = 1; day <= lastDayOfMonth.getDate(); day++) {
-        const dayDiv = document.createElement('div');
-        dayDiv.classList.add('calendar-day');
-        dayDiv.innerHTML = `<span class="day-number">${day}</span>`;
-        dayDiv.dataset.date = new Date(year, month, day).toISOString().split('T')[0]; // Store date as YYYY-MM-DD
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayElement = document.createElement('div');
+        dayElement.classList.add('calendar-day');
+        dayElement.dataset.date = dateString; // Store full date for easy lookup
 
-        // Add click listener to open interview form for that day
-        dayDiv.addEventListener('click', () => {
-            showInterviewFormModal(dayDiv.dataset.date);
+        // Add day number
+        const dayNumberSpan = document.createElement('span');
+        dayNumberSpan.classList.add('day-number');
+        dayNumberSpan.textContent = day;
+        dayElement.appendChild(dayNumberSpan);
+
+        // Add interviews for this day
+        const interviewsOnThisDay = interviews.filter(interview => {
+            // Ensure interview.start_datetime is a valid date string before creating Date object
+            if (!interview.start_datetime) return false;
+            const interviewDate = new Date(interview.start_datetime);
+            return window.isValidDate(interviewDate) && interviewDate.toISOString().split('T')[0] === dateString;
         });
 
-        calendarDaysGrid.appendChild(dayDiv);
-    }
-
-    // After rendering the grid, populate with interviews
-    await populateCalendarWithInterviews();
-    renderMiniCalendars(); // Render mini-calendars when main calendar updates
-}
-
-/**
- * Populates the main calendar grid with fetched interview data.
- */
-async function populateCalendarWithInterviews() {
-    // Clear existing events from the calendar days
-    document.querySelectorAll('.calendar-day').forEach(dayDiv => {
-        // Remove all children except the day number span
-        Array.from(dayDiv.children).forEach(child => {
-            if (!child.classList.contains('day-number')) {
-                child.remove();
-            }
-        });
-    });
-
-    const year = currentCalendarDate.getFullYear();
-    const month = currentCalendarDate.getMonth(); // 0-indexed
-
-    // Filter interviews relevant to the current month being displayed
-    const interviewsForMonth = interviews.filter(interview => {
-        const interviewDate = new Date(interview.start_datetime);
-        return isValidDate(interviewDate) &&
-               interviewDate.getFullYear() === year &&
-               interviewDate.getMonth() === month;
-    });
-
-    interviewsForMonth.forEach(interview => {
-        const interviewDate = new Date(interview.start_datetime);
-        const dayNumber = interviewDate.getDate();
-        const dayDiv = document.querySelector(`.calendar-day[data-date="${interviewDate.toISOString().split('T')[0]}"]`);
-
-        if (dayDiv) {
+        interviewsOnThisDay.forEach(interview => {
             const eventDiv = document.createElement('div');
             eventDiv.classList.add('calendar-event');
-            const startTime = interviewDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            eventDiv.innerHTML = `<span class="event-time">${startTime}</span> <span class="event-title">${interview.interview_title}</span>`;
-            eventDiv.dataset.interviewId = interview.id; // Store interview ID
+            eventDiv.dataset.id = interview.id;
 
-            eventDiv.addEventListener('click', (event) => {
-                event.stopPropagation(); // Prevent opening add interview modal
+            const startTime = new Date(interview.start_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            eventDiv.innerHTML = `<span class="event-time">${startTime}</span> ${interview.interview_title}`;
+            eventDiv.onclick = (event) => {
+                event.stopPropagation(); // Prevent day click from firing
                 showInterviewDetailModal(interview.id);
-            });
-            dayDiv.appendChild(eventDiv);
-        }
-    });
+            };
+            dayElement.appendChild(eventDiv);
+        });
+
+        dayElement.onclick = () => showInterviewFormModal(dateString); // Click day to add interview
+        daysGrid.appendChild(dayElement);
+    }
+
+    console.log("Calendar rendered. Total interviews for this month:", interviews.length);
+    renderMiniCalendars(); // Update mini calendars when main calendar changes
+    loadMonthlyInterviews(); // Update monthly list
 }
 
 /**
- * Loads interviews from the backend for the current month and populates the monthly list.
+ * Changes the displayed month in the main calendar.
+ * @param {number} offset - -1 for previous month, 1 for next month.
  */
-async function loadMonthlyInterviews() {
-    const monthlyInterviewList = document.getElementById('monthly-interview-list');
-    monthlyInterviewList.innerHTML = ''; // Clear previous list
-
-    const year = currentCalendarDate.getFullYear();
-    const month = currentCalendarDate.getMonth() + 1; // API expects 1-indexed month
-
-    try {
-        const response = await fetch(`/api/interviews?year=${year}&month=${month}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        interviews = await response.json(); // Update global interviews array
-
-        if (interviews.length === 0) {
-            monthlyInterviewList.innerHTML = '<p class="text-center">No interviews scheduled for this month.</p>';
-            return;
-        }
-
-        const table = document.createElement('table');
-        table.classList.add('interview-list-table');
-        table.innerHTML = `
-            <thead>
-                <tr>
-                    <th onclick="sortTableInterviews('interview_title')">Title</th>
-                    <th onclick="sortTableInterviews('start_datetime')">Date & Time</th>
-                    <th onclick="sortTableInterviews('location')">Location</th>
-                    <th onclick="sortTableInterviews('interview_type')">Type</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="interviews-table-body"></tbody>
-        `;
-        monthlyInterviewList.appendChild(table);
-
-        const tbody = document.getElementById('interviews-table-body');
-        interviews.forEach(interview => {
-            const row = tbody.insertRow();
-            const startDate = new Date(interview.start_datetime);
-            const endDate = new Date(interview.end_datetime);
-            row.innerHTML = `
-                <td>${interview.interview_title}</td>
-                <td>${startDate.toLocaleString()} - ${endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                <td>${interview.location || 'N/A'}</td>
-                <td>${interview.interview_type || 'N/A'}</td>
-                <td>
-                    <button class="btn btn-info btn-sm" onclick="showInterviewDetailModal('${interview.id}')">View</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteInterview('${interview.id}')">Delete</button>
-                </td>
-            `;
-        });
-
-        // After loading interviews, update the main calendar grid
-        populateCalendarWithInterviews();
-
-    } catch (error) {
-        console.error('Error loading monthly interviews:', error);
-        showAlert('Failed to load interviews. Please try again.', 'error');
-        monthlyInterviewList.innerHTML = '<p class="text-center text-error">Failed to load interviews.</p>';
-    }
+function changeMonth(offset) {
+    window.currentCalendarDate.setMonth(window.currentCalendarDate.getMonth() + offset);
+    renderCalendar();
 }
-
 
 /**
  * Renders mini calendars for the next two months.
@@ -176,114 +128,213 @@ function renderMiniCalendars() {
     const miniCalendar1 = document.getElementById('mini-calendar-next-1');
     const miniCalendar2 = document.getElementById('mini-calendar-next-2');
 
+    if (!miniCalendar1 || !miniCalendar2) {
+        console.error("Mini calendar containers not found.");
+        return;
+    }
+
     miniCalendar1.innerHTML = '';
     miniCalendar2.innerHTML = '';
 
-    const nextMonthDate1 = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() + 1, 1);
-    const nextMonthDate2 = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() + 2, 1);
+    const nextMonthDate = new Date(window.currentCalendarDate.getFullYear(), window.currentCalendarDate.getMonth() + 1, 1);
+    const twoMonthsLaterDate = new Date(window.currentCalendarDate.getFullYear(), window.currentCalendarDate.getMonth() + 2, 1);
 
-    drawMiniCalendar(miniCalendar1, nextMonthDate1);
-    drawMiniCalendar(miniCalendar2, nextMonthDate2);
+    renderSingleMiniCalendar(miniCalendar1, nextMonthDate);
+    renderSingleMiniCalendar(miniCalendar2, twoMonthsLaterDate);
 }
 
 /**
- * Draws a single mini calendar.
+ * Renders a single mini calendar.
  * @param {HTMLElement} container The container element for the mini calendar.
- * @param {Date} date The date object for the month to display.
+ * @param {Date} date The date object for the month to render.
  */
-function drawMiniCalendar(container, date) {
+function renderSingleMiniCalendar(container, date) {
     const year = date.getFullYear();
-    const month = date.getMonth();
+    const month = date.getMonth(); // 0-indexed
 
     const monthName = date.toLocaleString('default', { month: 'short' });
-    const firstDayOfMonth = new Date(year, month, 1);
-    const lastDayOfMonth = new Date(year, month + 1, 0);
-    const startDayOfWeek = firstDayOfMonth.getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
 
-    container.innerHTML = `
-        <div class="mini-calendar-header">
-            <h4>${monthName} ${year}</h4>
-        </div>
+    let miniCalendarHtml = `
+        <div class="mini-calendar-header"><h4>${monthName} ${year}</h4></div>
         <div class="mini-calendar-grid">
-            <div class="mini-calendar-day-header">Sun</div>
-            <div class="mini-calendar-day-header">Mon</div>
-            <div class="mini-calendar-day-header">Tue</div>
-            <div class="mini-calendar-day-header">Wed</div>
-            <div class="mini-calendar-day-header">Thu</div>
-            <div class="mini-calendar-day-header">Fri</div>
-            <div class="mini-calendar-day-header">Sat</div>
-        </div>
+            <div class="mini-calendar-day-header">S</div>
+            <div class="mini-calendar-day-header">M</div>
+            <div class="mini-calendar-day-header">T</div>
+            <div class="mini-calendar-day-header">W</div>
+            <div class="mini-calendar-day-header">T</div>
+            <div class="mini-calendar-day-header">F</div>
+            <div class="mini-calendar-day-header">S</div>
     `;
 
-    const grid = container.querySelector('.mini-calendar-grid');
-
-    for (let i = 0; i < startDayOfWeek; i++) {
-        const emptyDay = document.createElement('div');
-        emptyDay.classList.add('mini-calendar-day', 'empty');
-        grid.appendChild(emptyDay);
+    for (let i = 0; i < firstDayOfMonth; i++) {
+        miniCalendarHtml += '<div class="mini-calendar-day empty"></div>';
     }
 
-    for (let day = 1; day <= lastDayOfMonth.getDate(); day++) {
-        const dayDiv = document.createElement('div');
-        dayDiv.classList.add('mini-calendar-day');
-        dayDiv.textContent = day;
-
-        // Check for interviews on this day
-        const currentDayInterviews = interviews.filter(interview => {
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const hasInterview = interviews.some(interview => {
+            if (!interview.start_datetime) return false;
             const interviewDate = new Date(interview.start_datetime);
-            return isValidDate(interviewDate) &&
-                   interviewDate.getFullYear() === year &&
-                   interviewDate.getMonth() === month &&
-                   interviewDate.getDate() === day;
+            return window.isValidDate(interviewDate) && interviewDate.toISOString().split('T')[0] === dateString;
         });
-
-        if (currentDayInterviews.length > 0) {
-            const indicator = document.createElement('div');
-            indicator.classList.add('mini-event-indicator');
-            dayDiv.appendChild(indicator);
-        }
-        grid.appendChild(dayDiv);
+        miniCalendarHtml += `
+            <div class="mini-calendar-day">
+                ${day}
+                ${hasInterview ? '<span class="mini-event-indicator"></span>' : ''}
+            </div>
+        `;
     }
+    miniCalendarHtml += '</div>';
+    container.innerHTML = miniCalendarHtml;
 }
 
 /**
- * Shows the interview form modal, optionally pre-filling date for a new interview.
- * @param {string} dateString Optional date string (YYYY-MM-DD) to pre-fill.
- * @param {object} interviewData Optional interview object for editing.
+ * Loads and displays interviews for the current month in a list format.
  */
-function showInterviewFormModal(dateString = null, interviewData = null) {
+function loadMonthlyInterviews() {
+    console.log("Loading monthly interviews list...");
+    const monthlyInterviewList = document.getElementById('monthly-interview-list');
+    if (!monthlyInterviewList) {
+        console.error("Monthly interview list container not found.");
+        return;
+    }
+
+    const year = window.currentCalendarDate.getFullYear();
+    const month = window.currentCalendarDate.getMonth();
+
+    const interviewsThisMonth = interviews.filter(interview => {
+        if (!interview.start_datetime) return false;
+        const interviewDate = new Date(interview.start_datetime);
+        return window.isValidDate(interviewDate) && interviewDate.getFullYear() === year && interviewDate.getMonth() === month;
+    }).sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime));
+
+    console.log("Interviews for this month:", interviewsThisMonth);
+
+    if (interviewsThisMonth.length === 0) {
+        monthlyInterviewList.innerHTML = '<p class="text-center">No interviews scheduled for this month.</p>';
+        return;
+    }
+
+    let tableHtml = `
+        <table class="interview-list-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Title</th>
+                    <th>Location</th>
+                    <th>Type</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    interviewsThisMonth.forEach(interview => {
+        const startDt = new Date(interview.start_datetime);
+        const endDt = new Date(interview.end_datetime);
+
+        const dateStr = window.isValidDate(startDt) ? startDt.toLocaleDateString() : 'N/A';
+        const startTimeStr = window.isValidDate(startDt) ? startDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+        const endTimeStr = window.isValidDate(endDt) ? endDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+
+        tableHtml += `
+            <tr>
+                <td data-label="Date">${dateStr}</td>
+                <td data-label="Time">${startTimeStr} - ${endTimeStr}</td>
+                <td data-label="Title">${interview.interview_title || 'N/A'}</td>
+                <td data-label="Location">${interview.location || 'N/A'}</td>
+                <td data-label="Type">${interview.interview_type || 'N/A'}</td>
+                <td data-label="Actions">
+                    <button class="btn btn-info btn-sm view-interview-btn" data-id="${interview.id}">View</button>
+                    <button class="btn btn-secondary btn-sm edit-interview-btn" data-id="${interview.id}">Edit</button>
+                    <button class="btn btn-danger btn-sm delete-interview-btn" data-id="${interview.id}">Delete</button>
+                </td>
+            </tr>
+        `;
+    });
+
+    tableHtml += `
+            </tbody>
+        </table>
+    `;
+    monthlyInterviewList.innerHTML = tableHtml;
+
+    // Attach event listeners to newly rendered buttons
+    document.querySelectorAll('.view-interview-btn').forEach(button => {
+        button.onclick = (event) => showInterviewDetailModal(event.target.dataset.id);
+    });
+    document.querySelectorAll('.edit-interview-btn').forEach(button => {
+        button.onclick = (event) => editInterview(event.target.dataset.id);
+    });
+    document.querySelectorAll('.delete-interview-btn').forEach(button => {
+        button.onclick = (event) => deleteInterview(event.target.dataset.id);
+    });
+}
+
+/**
+ * Shows the interview form modal.
+ * @param {string} [date] Optional date to pre-fill the form.
+ * @param {string} [interviewId] Optional interview ID to pre-fill for editing.
+ */
+function showInterviewFormModal(date = null, interviewId = null) {
+    console.log('showInterviewFormModal called. Date:', date, 'Interview ID:', interviewId);
     const modal = document.getElementById('interview-form-modal');
-    const title = document.getElementById('interview-modal-title');
     const form = document.getElementById('interview-form');
-    form.reset(); // Clear previous form data
+    const titleInput = document.getElementById('interview-title');
+    const dateInput = document.getElementById('interview-date');
+    const startTimeInput = document.getElementById('interview-start-time');
+    const endTimeInput = document.getElementById('interview-end-time');
+    const locationInput = document.getElementById('interview-location');
+    const typeInput = document.getElementById('interview-type');
+    const notesInput = document.getElementById('interview-notes');
+    const interviewIdInput = document.getElementById('interview-id');
+    const modalTitle = document.getElementById('interview-modal-title');
 
-    document.getElementById('interview-id').value = ''; // Clear ID for new interview
+    if (!modal || !form || !titleInput || !dateInput || !startTimeInput || !endTimeInput || !locationInput || !typeInput || !notesInput || !interviewIdInput || !modalTitle) {
+        console.error("One or more interview form modal elements not found.");
+        return;
+    }
 
-    if (interviewData) {
-        title.textContent = 'Edit Interview';
-        document.getElementById('interview-id').value = interviewData.id;
-        document.getElementById('interview-title').value = interviewData.interview_title;
+    form.reset(); // Clear form
 
-        const startDate = new Date(interviewData.start_datetime);
-        const endDate = new Date(interviewData.end_datetime);
+    if (interviewId) {
+        modalTitle.textContent = 'Edit Interview';
+        const interview = interviews.find(i => String(i.id) === String(interviewId)); // Ensure string comparison
+        if (interview) {
+            console.log("Found interview for editing:", interview);
+            interviewIdInput.value = interview.id;
+            titleInput.value = interview.interview_title || '';
 
-        document.getElementById('interview-date').value = startDate.toISOString().split('T')[0];
-        document.getElementById('interview-start-time').value = startDate.toTimeString().slice(0, 5);
-        document.getElementById('interview-end-time').value = endDate.toTimeString().slice(0, 5);
-        document.getElementById('interview-location').value = interviewData.location || '';
-        document.getElementById('interview-type').value = interviewData.interview_type || '';
-        document.getElementById('interview-notes').value = interviewData.notes || '';
-    } else {
-        title.textContent = 'Schedule New Interview';
-        if (dateString) {
-            document.getElementById('interview-date').value = dateString;
+            const startDate = new Date(interview.start_datetime);
+            const endDate = new Date(interview.end_datetime);
+
+            dateInput.value = window.isValidDate(startDate) ? startDate.toISOString().split('T')[0] : '';
+            startTimeInput.value = window.isValidDate(startDate) ? startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+            endTimeInput.value = window.isValidDate(endDate) ? endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+
+            locationInput.value = interview.location || '';
+            typeInput.value = interview.interview_type || '';
+            notesInput.value = interview.notes || '';
         } else {
-            // Default to today's date if no date string provided for new interview
-            document.getElementById('interview-date').value = new Date().toISOString().split('T')[0];
+            console.error("Interview not found for ID:", interviewId);
+            window.showAlert("Interview not found for editing.", "error");
+            return; // Exit if interview not found
         }
-        // Set default times to common interview start/end times if not provided
-        document.getElementById('interview-start-time').value = '09:00';
-        document.getElementById('interview-end-time').value = '10:00';
+    } else {
+        modalTitle.textContent = 'Schedule New Interview';
+        interviewIdInput.value = '';
+        if (date) {
+            dateInput.value = date; // Pre-fill date if provided
+        }
+        // Set default times for new interview (e.g., next hour)
+        const now = new Date();
+        const nextHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0);
+        startTimeInput.value = nextHour.toTimeString().slice(0, 5);
+        const nextHourPlus30 = new Date(nextHour.getTime() + 30 * 60000); // Add 30 minutes
+        endTimeInput.value = nextHourPlus30.toTimeString().slice(0, 5);
     }
     modal.classList.add('active');
 }
@@ -292,118 +343,176 @@ function showInterviewFormModal(dateString = null, interviewData = null) {
  * Hides the interview form modal.
  */
 function hideInterviewFormModal() {
-    document.getElementById('interview-form-modal').classList.remove('active');
+    const modal = document.getElementById('interview-form-modal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
 }
 
 /**
- * Shows the interview detail modal.
- * @param {string} interviewId The ID of the interview to display.
+ * Saves a new interview or updates an existing one.
+ * @param {Event} event The form submission event.
  */
-async function showInterviewDetailModal(interviewId) {
-    const modal = document.getElementById('interview-detail-modal');
-    const interview = interviews.find(i => i.id === interviewId);
+async function saveInterview() {
+    const interviewId = document.getElementById('interview-id').value;
+    console.log('saveInterview - interviewId from hidden input (before sending):', interviewId);
 
-    if (!interview) {
-        showAlert('Interview details not found!', 'error');
+    const interviewTitle = document.getElementById('interview-title').value;
+    const interviewDate = document.getElementById('interview-date').value;
+    const startTime = document.getElementById('interview-start-time').value;
+    const endTime = document.getElementById('interview-end-time').value;
+    const location = document.getElementById('interview-location').value;
+    const type = document.getElementById('interview-type').value;
+    const notes = document.getElementById('interview-notes').value;
+
+    if (!interviewTitle || !interviewDate || !startTime || !endTime) {
+        window.showAlert('Please fill in all required interview fields (Title, Date, Start Time, End Time).', 'error');
         return;
     }
 
-    const startDate = new Date(interview.start_datetime);
-    const endDate = new Date(interview.end_datetime);
+    // Combine date and time into full datetime strings
+    const startDatetime = `${interviewDate}T${startTime}:00`;
+    const endDatetime = `${interviewDate}T${endTime}:00`;
 
-    document.getElementById('detail-interview-title').textContent = interview.interview_title;
-    document.getElementById('detail-interview-time').textContent =
-        `${startDate.toLocaleString()} - ${endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    // Client-side overlap check
+    const newStart = new Date(startDatetime);
+    const newEnd = new Date(endDatetime);
+
+    if (!window.isValidDate(newStart) || !window.isValidDate(newEnd)) {
+        window.showAlert('Invalid date or time format. Please check your input.', 'error');
+        return;
+    }
+
+    if (newStart >= newEnd) {
+        window.showAlert('End time must be after start time.', 'error');
+        return;
+    }
+
+    const hasOverlap = interviews.some(existingInterview => {
+        // Exclude the current interview if we are editing
+        if (interviewId && String(existingInterview.id) === String(interviewId)) {
+            return false;
+        }
+
+        const existingStart = new Date(existingInterview.start_datetime);
+        const existingEnd = new Date(existingInterview.end_datetime);
+
+        if (!window.isValidDate(existingStart) || !window.isValidDate(existingEnd)) {
+            console.warn("Skipping overlap check for invalid existing interview dates:", existingInterview);
+            return false;
+        }
+
+        // Check for overlap: (start1 < end2) and (end1 > start2)
+        return (newStart < existingEnd) && (newEnd > existingStart);
+    });
+
+    if (hasOverlap) {
+        window.showAlert('This interview time overlaps with an existing interview. Please choose a different time.', 'error');
+        return;
+    }
+
+    const interviewData = {
+        interview_title: interviewTitle,
+        start_datetime: startDatetime,
+        end_datetime: endDatetime,
+        location: location,
+        notes: notes,
+        interview_type: type
+    };
+
+    const method = interviewId ? 'PUT' : 'POST';
+    const url = interviewId ? `/api/interviews/${interviewId}` : '/api/interviews';
+
+    try {
+        console.log('Sending interview data:', interviewData);
+        console.log('Sending to URL:', url, 'with method:', method);
+
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(interviewData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to save interview.');
+        }
+
+        window.showAlert(`Interview ${interviewId ? 'updated' : 'scheduled'} successfully!`, 'success');
+        hideInterviewFormModal();
+        renderCalendar(); // Re-render calendar to show new/updated interview
+        loadMonthlyInterviews(); // Update monthly list
+        window.loadDashboardData(); // Reload dashboard data
+    } catch (error) {
+        console.error('Error saving interview:', error);
+        window.showAlert('Error saving interview: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Populates and shows the interview detail modal.
+ * @param {string} interviewId The ID of the interview to display.
+ */
+function showInterviewDetailModal(interviewId) {
+    const interview = interviews.find(i => String(i.id) === String(interviewId)); // Ensure string comparison
+    if (!interview) {
+        window.showAlert('Interview not found.', 'error');
+        return;
+    }
+    console.log('Viewing interview details for:', interview);
+
+    const detailModal = document.getElementById('interview-detail-modal');
+    document.getElementById('detail-interview-title').textContent = interview.interview_title || 'N/A';
+
+    const startDt = new Date(interview.start_datetime);
+    const endDt = new Date(interview.end_datetime);
+
+    const dateStr = window.isValidDate(startDt) ? startDt.toLocaleDateString() : 'N/A';
+    const timeRangeStr = (window.isValidDate(startDt) && window.isValidDate(endDt)) ?
+                         `${startDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'N/A';
+
+    document.getElementById('detail-interview-time').textContent = `${dateStr} ${timeRangeStr}`;
+
     document.getElementById('detail-interview-location').textContent = interview.location || 'N/A';
     document.getElementById('detail-interview-type').textContent = interview.interview_type || 'N/A';
     document.getElementById('detail-interview-notes').textContent = interview.notes || 'No notes.';
 
-    // Set up edit and delete buttons
-    document.getElementById('edit-interview-btn').onclick = () => {
-        hideInterviewDetailModal();
-        showInterviewFormModal(null, interview); // Pass the interview object for editing
-    };
-    document.getElementById('delete-interview-btn').onclick = () => {
-        hideInterviewDetailModal();
-        deleteInterview(interview.id);
-    };
+    // Set up Edit and Delete buttons in detail modal
+    const editBtn = document.getElementById('edit-interview-btn');
+    const deleteBtn = document.getElementById('delete-interview-btn');
+    if (editBtn) {
+        editBtn.onclick = () => {
+            hideInterviewDetailModal();
+            showInterviewFormModal(null, interview.id); // Pass ID for editing
+        };
+    }
+    if (deleteBtn) {
+        deleteBtn.onclick = () => {
+            hideInterviewDetailModal();
+            deleteInterview(interview.id);
+        };
+    }
 
-    modal.classList.add('active');
+    detailModal.classList.add('active');
 }
 
 /**
  * Hides the interview detail modal.
  */
 function hideInterviewDetailModal() {
-    document.getElementById('interview-detail-modal').classList.remove('active');
+    const modal = document.getElementById('interview-detail-modal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
 }
 
 /**
- * Saves a new or updates an existing interview.
+ * Edits an interview by showing the form modal with pre-filled data.
+ * @param {string} interviewId The ID of the interview to edit.
  */
-async function saveInterview() {
-    const interviewId = document.getElementById('interview-id').value;
-    const interviewTitle = document.getElementById('interview-title').value;
-    const interviewDate = document.getElementById('interview-date').value;
-    const interviewStartTime = document.getElementById('interview-start-time').value;
-    const interviewEndTime = document.getElementById('interview-end-time').value;
-    const interviewLocation = document.getElementById('interview-location').value;
-    const interviewType = document.getElementById('interview-type').value;
-    const interviewNotes = document.getElementById('interview-notes').value;
-
-    const startDateTime = new Date(`${interviewDate}T${interviewStartTime}:00`);
-    const endDateTime = new Date(`${interviewDate}T${interviewEndTime}:00`);
-
-    if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-        showAlert('Invalid date or time. Please check your input.', 'error');
-        return;
-    }
-
-    if (startDateTime >= endDateTime) {
-        showAlert('End time must be after start time.', 'error');
-        return;
-    }
-
-    const interviewData = {
-        interview_title: interviewTitle,
-        start_datetime: startDateTime.toISOString(),
-        end_datetime: endDateTime.toISOString(),
-        location: interviewLocation,
-        notes: interviewNotes,
-        interview_type: interviewType
-    };
-
-    try {
-        let response;
-        if (interviewId) {
-            // Update existing interview
-            response = await fetch(`/api/interviews/${interviewId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(interviewData)
-            });
-        } else {
-            // Add new interview
-            response = await fetch('/api/interviews', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(interviewData)
-            });
-        }
-
-        if (response.ok) {
-            showAlert('Interview saved successfully!', 'success');
-            hideInterviewFormModal();
-            await loadMonthlyInterviews(); // Reload interviews to update calendar and list
-            window.loadDashboardData(); // Also update dashboard (ensure this is exposed globally in dashboard.js)
-        } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to save interview.');
-        }
-    } catch (error) {
-        console.error('Error saving interview:', error);
-        showAlert('Error saving interview: ' + error.message, 'error');
-    }
+function editInterview(interviewId) {
+    hideInterviewDetailModal(); // Close detail modal if open
+    showInterviewFormModal(null, interviewId);
 }
 
 /**
@@ -411,118 +520,42 @@ async function saveInterview() {
  * @param {string} interviewId The ID of the interview to delete.
  */
 function deleteInterview(interviewId) {
-    showConfirm('Are you sure you want to delete this interview?', async () => {
+    window.showConfirm('Are you sure you want to delete this interview?', async () => {
         try {
             const response = await fetch(`/api/interviews/${interviewId}`, {
                 method: 'DELETE'
             });
 
-            if (response.ok) {
-                showAlert('Interview deleted successfully!', 'success');
-                await loadMonthlyInterviews(); // Reload interviews to update calendar and list
-                window.loadDashboardData(); // Also update dashboard
-            } else {
+            if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.detail || 'Failed to delete interview.');
             }
+
+            window.showAlert('Interview deleted successfully!', 'success');
+            hideInterviewDetailModal();
+            renderCalendar(); // Re-render calendar
+            loadMonthlyInterviews(); // Update monthly list
+            window.loadDashboardData(); // Reload dashboard data
         } catch (error) {
             console.error('Error deleting interview:', error);
-            showAlert('Error deleting interview: ' + error.message, 'error');
+            window.showAlert('Error deleting interview: ' + error.message, 'error');
         }
     });
 }
 
-/**
- * Sorts the interviews table.
- * @param {string} column The column to sort by.
- */
-let currentSortColumn = '';
-let currentSortDirection = 'asc'; // 'asc' or 'desc'
-
-function sortTableInterviews(column) {
-    if (currentSortColumn === column) {
-        currentSortDirection = (currentSortDirection === 'asc') ? 'desc' : 'asc';
-    } else {
-        currentSortColumn = column;
-        currentSortDirection = 'asc';
-    }
-
-    interviews.sort((a, b) => {
-        let valA = a[column];
-        let valB = b[column];
-
-        // Handle date comparisons
-        if (column.includes('date')) {
-            valA = new Date(valA);
-            valB = new Date(valB);
-        }
-
-        if (valA < valB) {
-            return currentSortDirection === 'asc' ? -1 : 1;
-        }
-        if (valA > valB) {
-            return currentSortDirection === 'asc' ? 1 : -1;
-        }
-        return 0;
-    });
-
-    // Re-render the table body
-    const tbody = document.getElementById('interviews-table-body');
-    tbody.innerHTML = ''; // Clear existing rows
-
-    interviews.forEach(interview => {
-        const row = tbody.insertRow();
-        const startDate = new Date(interview.start_datetime);
-        const endDate = new Date(interview.end_datetime);
-        row.innerHTML = `
-            <td>${interview.interview_title}</td>
-            <td>${startDate.toLocaleString()} - ${endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-            <td>${interview.location || 'N/A'}</td>
-            <td>${interview.interview_type || 'N/A'}</td>
-            <td>
-                <button class="btn btn-info btn-sm" onclick="showInterviewDetailModal('${interview.id}')">View</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteInterview('${interview.id}')">Delete</button>
-            </td>
-        `;
-    });
-}
-
-
-// --- Event Listeners for Calendar Page ---
-// Moved to app.js for centralized initialization and to ensure window.loadMonthlyInterviews is ready.
-// document.addEventListener('DOMContentLoaded', () => {
-//     document.getElementById('prev-month-btn')?.addEventListener('click', () => {
-//         currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
-//         renderCalendar();
-//         loadMonthlyInterviews();
-//     });
-
-//     document.getElementById('next-month-btn')?.addEventListener('click', () => {
-//         currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
-//         renderCalendar();
-//         loadMonthlyInterviews();
-//     });
-
-//     document.getElementById('add-interview-btn')?.addEventListener('click', () => showInterviewFormModal());
-
-//     document.getElementById('interview-form')?.addEventListener('submit', async (event) => {
-//         event.preventDefault();
-//         await saveInterview();
-//     });
-// });
-
-// Expose functions to the global scope for app.js and HTML
+// Expose functions to the global scope for access from other modules and HTML
+window.fetchInterviews = fetchInterviews;
 window.renderCalendar = renderCalendar;
+window.changeMonth = changeMonth;
+window.renderMiniCalendars = renderMiniCalendars;
+window.renderSingleMiniCalendar = renderSingleMiniCalendar; // Might not need to be global
 window.loadMonthlyInterviews = loadMonthlyInterviews;
 window.showInterviewFormModal = showInterviewFormModal;
 window.hideInterviewFormModal = hideInterviewFormModal;
+window.saveInterview = saveInterview;
 window.showInterviewDetailModal = showInterviewDetailModal;
 window.hideInterviewDetailModal = hideInterviewDetailModal;
+window.editInterview = editInterview;
 window.deleteInterview = deleteInterview;
-window.sortTableInterviews = sortTableInterviews;
-window.saveInterview = saveInterview; // Expose saveInterview globally
-window.changeMonth = (delta) => { // Expose changeMonth for prev/next buttons
-    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
-    renderCalendar();
-    loadMonthlyInterviews();
-};
+
+console.log("calendar.js loaded and functions exposed.");

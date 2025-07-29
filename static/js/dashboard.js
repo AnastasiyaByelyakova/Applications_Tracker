@@ -1,334 +1,243 @@
-// Dashboard-specific global variables
-let allApplications = []; // All applications for dashboard calculations
-let currentDashboardDate = new Date(); // For dashboard month selection
-let currentDashboardView = 'monthly'; // 'monthly' or 'all-time'
+/**
+ * Handles dashboard functionalities including chart rendering and data loading.
+ */
 
-// Chart instances to allow for updates
-let applicationsStatusChartInstance = null;
-let interviewsCountChartInstance = null;
-let applicationTrendChartInstance = null;
-let interviewTypeChartInstance = null;
-let skillsLevelChartInstance = null;
-let applicationsByJobTitleChartInstance = null;
+// Global Chart instances
+let applicationsStatusChart;
+let interviewsCountChart;
+let applicationTrendChart;
+let interviewTypeChart;
+let skillsLevelChart;
+let applicationsByJobTitleChart;
+
+// Global variables for dashboard state
+window.currentDashboardDate = new Date(); // Default to current month
+window.currentDashboardView = 'monthly'; // Default view: 'monthly' or 'all-time'
 
 /**
- * Loads all applications from the API for dashboard calculations.
- * @returns {Promise<void>}
+ * Destroys existing chart instances to prevent duplicates.
  */
-async function loadAllApplicationsForDashboard() {
-    try {
-        const response = await fetch('/api/applications');
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        allApplications = await response.json();
-        console.log('All applications loaded for dashboard:', allApplications);
-    } catch (error) {
-        console.error('Error loading all applications for dashboard:', error);
-        // Using window.showAlert as it's a global utility function
-        window.showAlert('Failed to load all applications for dashboard. Please try again.', 'error');
-    }
+function destroyCharts() {
+    if (applicationsStatusChart) applicationsStatusChart.destroy();
+    if (interviewsCountChart) interviewsCountChart.destroy();
+    if (applicationTrendChart) applicationTrendChart.destroy();
+    if (interviewTypeChart) interviewTypeChart.destroy();
+    if (skillsLevelChart) skillsLevelChart.destroy();
+    if (applicationsByJobTitleChart) applicationsByJobTitleChart.destroy();
 }
 
 /**
- * Loads and renders all dashboard data based on the current view (monthly or all-time).
- * @returns {Promise<void>}
- */
-async function loadDashboardData() {
-    await loadAllApplicationsForDashboard(); // Ensure all applications are loaded
-
-    let dashboardApplications = [];
-    let dashboardInterviews = [];
-
-    if (currentDashboardView === 'monthly') {
-        // Fetch interviews for the specific month
-        const year = currentDashboardDate.getFullYear();
-        const month = currentDashboardDate.getMonth() + 1; // Months are 0-indexed in JS, 1-indexed in API
-        try {
-            const response = await fetch(`/api/interviews?year=${year}&month=${month}`);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            dashboardInterviews = await response.json();
-        } catch (error) {
-            console.error('Error loading monthly interviews for dashboard:', error);
-            window.showAlert('Failed to load monthly interviews for dashboard. Please try again.', 'error');
-            dashboardInterviews = []; // Ensure it's an empty array on error
-        }
-
-        // Filter applications for the specific month
-        const selectedYear = currentDashboardDate.getFullYear();
-        const selectedMonth = currentDashboardDate.getMonth(); // 0-indexed
-        dashboardApplications = allApplications.filter(app => {
-            const appDate = new Date(app.application_date);
-            return window.isValidDate(appDate) &&
-                   appDate.getFullYear() === selectedYear &&
-                   appDate.getMonth() === selectedMonth;
-        });
-        document.getElementById('dashboard-month-selector').style.display = 'block';
-
-    } else if (currentDashboardView === 'all-time') {
-        // For all-time view, use all loaded applications and fetch all interviews
-        dashboardApplications = allApplications;
-        try {
-            const response = await fetch('/api/interviews'); // Fetch all interviews
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            dashboardInterviews = await response.json();
-        } catch (error) {
-            console.error('Error loading all-time interviews for dashboard:', error);
-            window.showAlert('Failed to load all-time interviews for dashboard. Please try again.', 'error');
-            dashboardInterviews = []; // Ensure it's an empty array on error
-        }
-        document.getElementById('dashboard-month-selector').style.display = 'none';
-    }
-
-    renderApplicationsStatusChart(dashboardApplications);
-    renderInterviewsCountChart(dashboardInterviews);
-    renderApplicationTrendChart(dashboardApplications);
-    renderInterviewTypeChart(dashboardInterviews);
-    // Assuming 'profile' is a global variable loaded by main.js or app.js
-    // Ensure window.profile is available before calling this
-    if (window.profile && window.profile.skills) {
-        renderSkillsLevelChart(window.profile.skills);
-    } else {
-        console.warn("Profile or profile skills not available for rendering Skills by Level chart.");
-        // Optionally clear or show a message in the chart area if data is missing
-    }
-    renderApplicationsByJobTitleChart(dashboardApplications);
-}
-
-/**
- * Renders the Applications by Status doughnut chart.
- * @param {Array<Object>} data Array of application objects.
+ * Renders the Applications by Status Pie Chart.
+ * @param {object} data - Data for the chart.
  */
 function renderApplicationsStatusChart(data) {
-    const ctx = document.getElementById('applicationsStatusChart').getContext('2d');
-
-    const statusCounts = {
-        "Applied": 0,
-        "Interview": 0,
-        "Rejection": 0,
-        "Offer": 0
-    };
-
-    data.forEach(app => {
-        if (statusCounts.hasOwnProperty(app.status)) {
-            statusCounts[app.status]++;
-        }
-    });
-
-    const chartData = {
-        labels: Object.keys(statusCounts),
-        datasets: [{
-            data: Object.values(statusCounts),
-            backgroundColor: [
-                '#4299e1', // Applied (Blue)
-                '#f6ad55', // Interview (Orange)
-                '#ef4444', // Rejection (Red)
-                '#48bb78'  // Offer (Green)
-            ],
-            hoverOffset: 4
-        }]
-    };
-
-    if (applicationsStatusChartInstance) {
-        applicationsStatusChartInstance.destroy();
+    const ctx = document.getElementById('applicationsStatusChart');
+    if (!ctx) {
+        console.error("applicationsStatusChart canvas not found.");
+        return;
     }
-    applicationsStatusChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: chartData,
+
+    applicationsStatusChart = new Chart(ctx, {
+        type: 'doughnut', // Doughnut chart for status
+        data: {
+            labels: data.labels,
+            datasets: [{
+                data: data.counts,
+                backgroundColor: data.colors,
+                borderColor: '#fff',
+                borderWidth: 2
+            }]
+        },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    position: 'top',
+                    position: 'right',
+                    labels: {
+                        font: {
+                            family: 'Inter',
+                            size: 12,
+                            weight: '500'
+                        }
+                    }
                 },
                 title: {
-                    display: false,
-                    text: 'Applications by Status'
+                    display: true,
+                    text: 'Applications by Status',
+                    font: {
+                        family: 'Inter',
+                        size: 16,
+                        weight: '600'
+                    },
+                    color: '#2c3e50'
+                },
+                // Configure datalabels plugin
+                datalabels: {
+                    color: '#fff', // White color for labels
+                    font: {
+                        family: 'Inter',
+                        size: 12,
+                        weight: 'bold'
+                    },
+                    formatter: (value, context) => {
+                        const total = context.dataset.data.reduce((sum, current) => sum + current, 0);
+                        const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                        return `${value} (${percentage}%)`; // Display count and percentage
+                    }
                 }
             }
-        }
+        },
+        plugins: [ChartDataLabels] // Register the plugin for this chart
     });
 }
 
 /**
- * Renders the Interviews Scheduled bar chart.
- * @param {Array<Object>} data Array of interview objects.
+ * Renders the Interviews Scheduled Bar Chart.
+ * @param {object} data - Data for the chart.
  */
 function renderInterviewsCountChart(data) {
-    const ctx = document.getElementById('interviewsCountChart').getContext('2d');
-
-    let labels;
-    let interviewCounts;
-    let xTitle;
-
-    if (currentDashboardView === 'monthly') {
-        const daysInMonth = new Date(currentDashboardDate.getFullYear(), currentDashboardDate.getMonth() + 1, 0).getDate();
-        labels = Array.from({ length: daysInMonth }, (_, i) => i + 1); // Days 1 to 31
-        interviewCounts = new Array(daysInMonth).fill(0);
-        xTitle = 'Day of Month';
-
-        data.forEach(interview => {
-            const interviewDay = new Date(interview.start_datetime).getDate();
-            if (window.isValidDate(new Date(interview.start_datetime)) && interviewDay >= 1 && interviewDay <= daysInMonth) {
-                interviewCounts[interviewDay - 1]++;
-            }
-        });
-    } else { // All-time view
-        // Group by month and year
-        const monthlyCounts = {};
-        data.forEach(interview => {
-            const interviewDate = new Date(interview.start_datetime);
-            if (window.isValidDate(interviewDate)) {
-                const monthYear = `${interviewDate.getFullYear()}-${(interviewDate.getMonth() + 1).toString().padStart(2, '0')}`;
-                monthlyCounts[monthYear] = (monthlyCounts[monthYear] || 0) + 1;
-            }
-        });
-        labels = Object.keys(monthlyCounts).sort();
-        interviewCounts = labels.map(label => monthlyCounts[label]);
-        xTitle = 'Month-Year';
+    const ctx = document.getElementById('interviewsCountChart');
+    if (!ctx) {
+        console.error("interviewsCountChart canvas not found.");
+        return;
     }
 
-    const chartData = {
-        labels: labels,
-        datasets: [{
-            label: 'Number of Interviews',
-            data: interviewCounts,
-            backgroundColor: '#667eea',
-            borderColor: '#5a67d8',
-            borderWidth: 1,
-            borderRadius: 5,
-        }]
-    };
-
-    if (interviewsCountChartInstance) {
-        interviewsCountChartInstance.destroy();
-    }
-    interviewsCountChartInstance = new Chart(ctx, {
+    interviewsCountChart = new Chart(ctx, {
         type: 'bar',
-        data: chartData,
+        data: {
+            labels: data.labels,
+            datasets: [{
+                label: 'Interviews',
+                data: data.counts,
+                backgroundColor: '#4a90e2', // Blue color
+                borderColor: '#4a90e2',
+                borderWidth: 1
+            }]
+        },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    display: false,
+                    display: false
                 },
                 title: {
-                    display: false,
-                    text: 'Interviews Scheduled'
+                    display: true,
+                    text: 'Interviews Scheduled',
+                    font: {
+                        family: 'Inter',
+                        size: 16,
+                        weight: '600'
+                    },
+                    color: '#2c3e50'
+                },
+                datalabels: {
+                    anchor: 'end',
+                    align: 'top',
+                    color: '#333',
+                    font: {
+                        family: 'Inter',
+                        size: 10,
+                        weight: 'bold'
+                    },
+                    formatter: (value) => value > 0 ? value : '' // Only show label if value > 0
                 }
             },
             scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Day of Month',
+                        font: {
+                            family: 'Inter',
+                            size: 12,
+                            weight: '500'
+                        },
+                        color: '#555'
+                    },
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: {
+                            family: 'Inter'
+                        }
+                    }
+                },
                 y: {
                     beginAtZero: true,
                     title: {
                         display: true,
-                        text: 'Count'
+                        text: 'Count',
+                        font: {
+                            family: 'Inter',
+                            size: 12,
+                            weight: '500'
+                        },
+                        color: '#555'
                     },
                     ticks: {
-                        stepSize: 1
-                    }
-                },
-                x: {
-                    title: {
-                        display: true,
-                        text: xTitle
+                        precision: 0, // Ensure integer ticks
+                        font: {
+                            family: 'Inter'
+                        }
                     }
                 }
             }
-        }
+        },
+        plugins: [ChartDataLabels] // Register the plugin for this chart
     });
 }
 
 /**
- * Renders the Application Trends line chart.
- * @param {Array<Object>} data Array of application objects.
+ * Renders the Application Trends Line Chart.
+ * @param {object} data - Data for the chart.
  */
 function renderApplicationTrendChart(data) {
-    const ctx = document.getElementById('applicationTrendChart').getContext('2d');
-
-    let labels;
-    let dailyOrMonthlyApplications;
-    let xTitle;
-
-    if (currentDashboardView === 'monthly') {
-        const daysInMonth = new Date(currentDashboardDate.getFullYear(), currentDashboardDate.getMonth() + 1, 0).getDate();
-        labels = Array.from({ length: daysInMonth }, (_, i) => i + 1); // Days 1 to 31
-        dailyOrMonthlyApplications = new Array(daysInMonth).fill(0);
-        xTitle = 'Day of Month';
-
-        data.forEach(app => {
-            const appDate = new Date(app.application_date);
-            const appDay = appDate.getDate();
-            if (window.isValidDate(appDate) && appDay >= 1 && appDay <= daysInMonth) {
-                dailyOrMonthlyApplications[appDay - 1]++;
-            }
-        });
-    } else { // All-time view
-        // Group by month and year
-        const monthlyApplicationsMap = {};
-        data.forEach(app => {
-            const appDate = new Date(app.application_date);
-            if (window.isValidDate(appDate)) {
-                const monthYear = `${appDate.getFullYear()}-${(appDate.getMonth() + 1).toString().padStart(2, '0')}`;
-                monthlyApplicationsMap[monthYear] = (monthlyApplicationsMap[monthYear] || 0) + 1;
-            }
-        });
-        labels = Object.keys(monthlyApplicationsMap).sort();
-        dailyOrMonthlyApplications = labels.map(label => monthlyApplicationsMap[label]);
-        xTitle = 'Month-Year';
+    const ctx = document.getElementById('applicationTrendChart');
+    if (!ctx) {
+        console.error("applicationTrendChart canvas not found.");
+        return;
     }
 
-    const chartData = {
-        labels: labels,
-        datasets: [{
-            label: 'Applications Submitted',
-            data: dailyOrMonthlyApplications,
-            fill: false,
-            borderColor: '#48bb78', // Green
-            tension: 0.1
-        }]
-    };
-
-    if (applicationTrendChartInstance) {
-        applicationTrendChartInstance.destroy();
-    }
-    applicationTrendChartInstance = new Chart(ctx, {
+    applicationTrendChart = new Chart(ctx, {
         type: 'line',
-        data: chartData,
+        data: {
+            labels: data.labels,
+            datasets: [{
+                label: 'Applications',
+                data: data.counts,
+                borderColor: '#28a745', // Green color
+                backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                fill: true,
+                tension: 0.3, // Smooth the line
+                pointBackgroundColor: '#28a745',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 1,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    display: false,
+                    display: false
                 },
                 title: {
-                    display: false,
-                    text: 'Application Trends'
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Count'
+                    display: true,
+                    text: 'Application Trends',
+                    font: {
+                        family: 'Inter',
+                        size: 16,
+                        weight: '600'
                     },
-                    ticks: {
-                        stepSize: 1
-                    }
+                    color: '#2c3e50'
                 },
-                x: {
-                    title: {
-                        display: true,
-                        text: xTitle
-                    }
+                datalabels: {
+                    display: false // Usually not needed for line charts unless specific points are highlighted
                 }
             }
         }
@@ -336,209 +245,432 @@ function renderApplicationTrendChart(data) {
 }
 
 /**
- * Renders the Interview Types pie chart.
- * @param {Array<Object>} data Array of interview objects.
+ * Renders the Interview Types Pie Chart.
+ * @param {object} data - Data for the chart.
  */
 function renderInterviewTypeChart(data) {
-    const ctx = document.getElementById('interviewTypeChart').getContext('2d');
-
-    const typeCounts = {};
-    data.forEach(interview => {
-        const type = interview.interview_type || 'Unspecified';
-        typeCounts[type] = (typeCounts[type] || 0) + 1;
-    });
-
-    const backgroundColors = [
-        '#667eea', // Purple
-        '#4299e1', // Blue
-        '#48bb78', // Green
-        '#f6ad55', // Orange
-        '#ef4444', // Red
-        '#a0aec0'  // Gray
-    ];
-
-    const chartData = {
-        labels: Object.keys(typeCounts),
-        datasets: [{
-            data: Object.values(typeCounts),
-            backgroundColor: backgroundColors.slice(0, Object.keys(typeCounts).length),
-            hoverOffset: 4
-        }]
-    };
-
-    if (interviewTypeChartInstance) {
-        interviewTypeChartInstance.destroy();
+    const ctx = document.getElementById('interviewTypeChart');
+    if (!ctx) {
+        console.error("interviewTypeChart canvas not found.");
+        return;
     }
-    interviewTypeChartInstance = new Chart(ctx, {
+
+    interviewTypeChart = new Chart(ctx, {
         type: 'pie',
-        data: chartData,
+        data: {
+            labels: data.labels,
+            datasets: [{
+                data: data.counts,
+                backgroundColor: data.colors,
+                borderColor: '#fff',
+                borderWidth: 2
+            }]
+        },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    position: 'top',
+                    position: 'right',
+                    labels: {
+                        font: {
+                            family: 'Inter',
+                            size: 12,
+                            weight: '500'
+                        }
+                    }
                 },
                 title: {
-                    display: false,
-                    text: 'Interview Type Breakdown'
+                    display: true,
+                    text: 'Interview Types',
+                    font: {
+                        family: 'Inter',
+                        size: 16,
+                        weight: '600'
+                    },
+                    color: '#2c3e50'
+                },
+                // Configure datalabels plugin
+                datalabels: {
+                    color: '#fff', // White color for labels
+                    font: {
+                        family: 'Inter',
+                        size: 12,
+                        weight: 'bold'
+                    },
+                    formatter: (value, context) => {
+                        const total = context.dataset.data.reduce((sum, current) => sum + current, 0);
+                        const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                        return `${value} (${percentage}%)`; // Display count and percentage
+                    }
                 }
             }
-        }
+        },
+        plugins: [ChartDataLabels] // Register the plugin for this chart
     });
 }
 
 /**
- * Renders the Skills by Level bar chart.
- * @param {Array<Object>} skillsData Array of skill objects from the user profile.
+ * Renders the Skills by Level Bar Chart.
+ * @param {object} data - Data for the chart.
  */
-function renderSkillsLevelChart(skillsData) {
-    const ctx = document.getElementById('skillsLevelChart').getContext('2d');
-
-    const levelCounts = {
-        "Beginner": 0,
-        "Intermediate": 0,
-        "Advanced": 0,
-        "Expert": 0
-    };
-
-    skillsData.forEach(skill => {
-        if (levelCounts.hasOwnProperty(skill.level)) {
-            levelCounts[skill.level]++;
-        }
-    });
-
-    const chartData = {
-        labels: Object.keys(levelCounts),
-        datasets: [{
-            label: 'Number of Skills',
-            data: Object.values(levelCounts),
-            backgroundColor: [
-                '#a0aec0', // Beginner (Gray)
-                '#f6ad55', // Intermediate (Orange)
-                '#4299e1', // Advanced (Blue)
-                '#48bb78'  // Expert (Green)
-            ],
-            borderColor: '#ffffff',
-            borderWidth: 1
-        }]
-    };
-
-    if (skillsLevelChartInstance) {
-        skillsLevelChartInstance.destroy();
+function renderSkillsLevelChart(data) {
+    const ctx = document.getElementById('skillsLevelChart');
+    if (!ctx) {
+        console.error("skillsLevelChart canvas not found.");
+        return;
     }
-    skillsLevelChartInstance = new Chart(ctx, {
+
+    skillsLevelChart = new Chart(ctx, {
         type: 'bar',
-        data: chartData,
+        data: {
+            labels: data.labels,
+            datasets: [{
+                label: 'Number of Skills',
+                data: data.counts,
+                backgroundColor: '#4a90e2', // Blue color
+                borderColor: '#4a90e2',
+                borderWidth: 1
+            }]
+        },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     display: false
                 },
                 title: {
-                    display: false
+                    display: true,
+                    text: 'Skills by Level',
+                    font: {
+                        family: 'Inter',
+                        size: 16,
+                        weight: '600'
+                    },
+                    color: '#2c3e50'
+                },
+                datalabels: {
+                    anchor: 'end',
+                    align: 'top',
+                    color: '#333',
+                    font: {
+                        family: 'Inter',
+                        size: 10,
+                        weight: 'bold'
+                    },
+                    formatter: (value) => value > 0 ? value : ''
                 }
             },
             scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Skill Level',
+                        font: {
+                            family: 'Inter',
+                            size: 12,
+                            weight: '500'
+                        },
+                        color: '#555'
+                    },
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: {
+                            family: 'Inter'
+                        }
+                    }
+                },
                 y: {
                     beginAtZero: true,
                     title: {
                         display: true,
-                        text: 'Number of Skills'
+                        text: 'Count',
+                        font: {
+                            family: 'Inter',
+                            size: 12,
+                            weight: '500'
+                        },
+                        color: '#555'
                     },
                     ticks: {
-                        stepSize: 1
-                    }
-                },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Skill Level'
+                        precision: 0,
+                        font: {
+                            family: 'Inter'
+                        }
                     }
                 }
             }
-        }
+        },
+        plugins: [ChartDataLabels] // Register the plugin for this chart
     });
 }
 
 /**
- * Renders the Applications by Job Title bar chart.
- * @param {Array<Object>} data Array of application objects.
+ * Renders the Applications by Job Title Bar Chart.
+ * @param {object} data - Data for the chart.
  */
 function renderApplicationsByJobTitleChart(data) {
-    const ctx = document.getElementById('applicationsByJobTitleChart').getContext('2d');
+    const ctx = document.getElementById('applicationsByJobTitleChart');
+    if (!ctx) {
+        console.error("applicationsByJobTitleChart canvas not found.");
+        return;
+    }
 
+    applicationsByJobTitleChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.labels,
+            datasets: [{
+                label: 'Applications',
+                data: data.counts,
+                backgroundColor: '#17a2b8', // Info blue color
+                borderColor: '#17a2b8',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: true,
+                    text: 'Applications by Job Title',
+                    font: {
+                        family: 'Inter',
+                        size: 16,
+                        weight: '600'
+                    },
+                    color: '#2c3e50'
+                },
+                datalabels: {
+                    anchor: 'end',
+                    align: 'top',
+                    color: '#333',
+                    font: {
+                        family: 'Inter',
+                        size: 10,
+                        weight: 'bold'
+                    },
+                    formatter: (value) => value > 0 ? value : ''
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Job Title',
+                        font: {
+                            family: 'Inter',
+                            size: 12,
+                            weight: '500'
+                        },
+                        color: '#555'
+                    },
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: {
+                            family: 'Inter'
+                        }
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Count',
+                        font: {
+                            family: 'Inter',
+                            size: 12,
+                            weight: '500'
+                        },
+                        color: '#555'
+                    },
+                    ticks: {
+                        precision: 0,
+                        font: {
+                            family: 'Inter'
+                        }
+                    }
+                }
+            }
+        },
+        plugins: [ChartDataLabels] // Register the plugin for this chart
+    });
+}
+
+
+/**
+ * Loads and processes data for the dashboard charts.
+ */
+async function loadDashboardData() {
+    destroyCharts(); // Destroy existing charts before rendering new ones
+
+    let allApplications = [];
+    let allInterviews = [];
+    let userProfile = null;
+
+    // Defensive checks before calling global functions
+    if (window.fetchApplications && typeof window.fetchApplications === 'function') {
+        allApplications = await window.fetchApplications(); // From applications.js
+    } else {
+        console.error("window.fetchApplications is not available. Dashboard data may be incomplete.");
+    }
+
+    if (window.fetchInterviews && typeof window.fetchInterviews === 'function') {
+        allInterviews = await window.fetchInterviews(); // From calendar.js
+    } else {
+        console.error("window.fetchInterviews is not available. Dashboard data may be incomplete.");
+    }
+
+    if (window.fetchProfile && typeof window.fetchProfile === 'function') {
+        userProfile = await window.fetchProfile(); // From profile.js
+    } else {
+        console.error("window.fetchProfile is not available. Dashboard data may be incomplete.");
+    }
+
+
+    let filteredApplications = allApplications;
+    let filteredInterviews = allInterviews;
+
+    const dashboardMonthSelect = document.getElementById('dashboard-month-select');
+    if (dashboardMonthSelect) {
+        const selectedMonth = dashboardMonthSelect.value;
+        if (window.currentDashboardView === 'monthly' && selectedMonth) {
+            const [year, month] = selectedMonth.split('-').map(Number);
+
+            // Filter applications for the selected month
+            filteredApplications = allApplications.filter(app => {
+                const appDate = new Date(app.application_date);
+                return window.isValidDate(appDate) && appDate.getFullYear() === year && (appDate.getMonth() + 1) === month;
+            });
+
+            // Filter interviews for the selected month
+            filteredInterviews = allInterviews.filter(interview => {
+                if (!interview.start_datetime) {
+                    console.warn("Interview missing start_datetime:", interview);
+                    return false; // Skip if datetime is missing
+                }
+                const interviewDate = new Date(interview.start_datetime);
+                return window.isValidDate(interviewDate) && interviewDate.getFullYear() === year && (interviewDate.getMonth() + 1) === month;
+            });
+        }
+    }
+
+    console.log("Dashboard - Filtered Applications:", filteredApplications);
+    console.log("Dashboard - Filtered Interviews (for charts):", filteredInterviews); // Crucial log for debugging
+
+
+    // 1. Applications by Status
+    const statusCounts = {};
+    filteredApplications.forEach(app => {
+        statusCounts[app.status] = (statusCounts[app.status] || 0) + 1;
+    });
+    const statusLabels = Object.keys(statusCounts);
+    const statusData = Object.values(statusCounts);
+    const statusColors = statusLabels.map(status => {
+        switch (status) {
+            case 'Applied': return '#4a90e2'; // Blue
+            case 'Interview': return '#f5a623'; // Orange
+            case 'Rejection': return '#dc3545'; // Red
+            case 'Offer': return '#28a745'; // Green
+            default: return '#cccccc'; // Gray
+        }
+    });
+    renderApplicationsStatusChart({ labels: statusLabels, counts: statusData, colors: statusColors });
+
+    // 2. Interviews Scheduled (by day of month)
+    const interviewDayCounts = {};
+    filteredInterviews.forEach(interview => {
+        // Ensure start_datetime exists and is a valid date before processing
+        if (!interview.start_datetime) {
+            console.warn("Skipping interview for chart due to missing start_datetime:", interview);
+            return;
+        }
+        const date = new Date(interview.start_datetime);
+        if (window.isValidDate(date)) {
+            const day = date.getDate();
+            interviewDayCounts[day] = (interviewDayCounts[day] || 0) + 1;
+        } else {
+            console.warn("Skipping interview for chart due to invalid start_datetime:", interview.start_datetime);
+        }
+    });
+    const daysInMonth = new Date(window.currentDashboardDate.getFullYear(), window.currentDashboardDate.getMonth() + 1, 0).getDate();
+    const interviewLabels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const interviewData = interviewLabels.map(day => interviewDayCounts[day] || 0);
+    console.log("Dashboard - Interviews Scheduled Chart Data:", { labels: interviewLabels, counts: interviewData }); // Debug chart data
+    renderInterviewsCountChart({ labels: interviewLabels, counts: interviewData });
+
+    // 3. Application Trends (by day of month)
+    const applicationDayCounts = {};
+    filteredApplications.forEach(app => {
+        const date = new Date(app.application_date);
+        if (window.isValidDate(date)) {
+            const day = date.getDate();
+            applicationDayCounts[day] = (applicationDayCounts[day] || 0) + 1;
+        }
+    });
+    const trendLabels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const trendData = trendLabels.map(day => applicationDayCounts[day] || 0);
+    renderApplicationTrendChart({ labels: trendLabels, counts: trendData });
+
+    // 4. Interview Types
+    const interviewTypeCounts = {};
+    filteredInterviews.forEach(interview => {
+        const type = interview.interview_type || 'Unspecified';
+        interviewTypeCounts[type] = (interviewTypeCounts[type] || 0) + 1;
+    });
+    const interviewTypeLabels = Object.keys(interviewTypeCounts);
+    const interviewTypeData = Object.values(interviewTypeCounts);
+    const interviewTypeColors = interviewTypeLabels.map((_, i) => `hsl(${i * 60 % 360}, 70%, 60%)`); // Generate distinct colors
+    console.log("Dashboard - Interview Types Chart Data:", { labels: interviewTypeLabels, counts: interviewTypeData, colors: interviewTypeColors }); // Debug chart data
+    renderInterviewTypeChart({ labels: interviewTypeLabels, counts: interviewTypeData, colors: interviewTypeColors });
+
+    // 5. Skills by Level
+    const skillLevelCounts = {};
+    if (userProfile && userProfile.skills) {
+        userProfile.skills.forEach(skill => {
+            const level = skill.level || 'Unspecified';
+            skillLevelCounts[level] = (skillLevelCounts[level] || 0) + 1;
+        });
+    }
+    const skillLevelOrder = ['Beginner', 'Intermediate', 'Advanced', 'Expert', 'Unspecified'];
+    const skillLabels = skillLevelOrder.filter(level => skillLevelCounts[level] !== undefined);
+    const skillData = skillLabels.map(level => skillLevelCounts[level]);
+    renderSkillsLevelChart({ labels: skillLabels, counts: skillData });
+
+    // 6. Applications by Job Title
     const jobTitleCounts = {};
-    data.forEach(app => {
+    filteredApplications.forEach(app => {
         const title = app.job_title || 'Unspecified';
         jobTitleCounts[title] = (jobTitleCounts[title] || 0) + 1;
     });
-
-    // Sort job titles by count in descending order and take top N
-    const sortedJobTitles = Object.entries(jobTitleCounts).sort(([, countA], [, countB]) => countB - countA);
-    const topN = 5; // Display top 5 job titles
-    const labels = sortedJobTitles.slice(0, topN).map(([title,]) => title);
-    const counts = sortedJobTitles.slice(0, topN).map(([, count]) => count);
-
-    const backgroundColors = [
-        '#667eea', '#4299e1', '#48bb78', '#f6ad55', '#ef4444', '#a0aec0'
-    ];
-
-    const chartData = {
-        labels: labels,
-        datasets: [{
-            label: 'Number of Applications',
-            data: counts,
-            backgroundColor: backgroundColors.slice(0, labels.length),
-            borderColor: '#ffffff',
-            borderWidth: 1
-        }]
-    };
-
-    if (applicationsByJobTitleChartInstance) {
-        applicationsByJobTitleChartInstance.destroy();
-    }
-    applicationsByJobTitleChartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: chartData,
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                title: {
-                    display: false
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: {
-                        display: true,
-                        text: 'Count'
-                    },
-                    ticks: {
-                        stepSize: 1
-                    }
-                },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Job Title'
-                    }
-                }
-            }
-        }
-    });
+    const jobTitleLabels = Object.keys(jobTitleCounts).sort((a, b) => jobTitleCounts[b] - jobTitleCounts[a]).slice(0, 5); // Top 5 titles
+    const jobTitleData = jobTitleLabels.map(title => jobTitleCounts[title]);
+    const jobTitleColors = jobTitleLabels.map((_, i) => `hsl(${i * 80 % 360}, 60%, 50%)`); // Generate distinct colors
+    renderApplicationsByJobTitleChart({ labels: jobTitleLabels, counts: jobTitleData, colors: jobTitleColors });
 }
 
-// Expose dashboard functions and variables to the global scope
-window.currentDashboardDate = currentDashboardDate;
-window.currentDashboardView = currentDashboardView;
+// Set initial month for dashboard month selector
+document.addEventListener('DOMContentLoaded', () => {
+    const dashboardMonthSelect = document.getElementById('dashboard-month-select');
+    if (dashboardMonthSelect) {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = (today.getMonth() + 1).toString().padStart(2, '0');
+        dashboardMonthSelect.value = `${year}-${month}`;
+    }
+});
+
+
+// Expose functions to the window object
 window.loadDashboardData = loadDashboardData;
 window.renderApplicationsStatusChart = renderApplicationsStatusChart;
 window.renderInterviewsCountChart = renderInterviewsCountChart;
@@ -546,3 +678,5 @@ window.renderApplicationTrendChart = renderApplicationTrendChart;
 window.renderInterviewTypeChart = renderInterviewTypeChart;
 window.renderSkillsLevelChart = renderSkillsLevelChart;
 window.renderApplicationsByJobTitleChart = renderApplicationsByJobTitleChart;
+
+console.log("dashboard.js loaded and functions exposed.");

@@ -1,20 +1,16 @@
-// Global variable for profile data
+/**
+ * Handles all functionalities related to the user's professional profile:
+ * loading, saving, and managing dynamic fields like education, experience, and skills.
+ */
+
+// Global variable to store the user's profile data
 let profile = {};
 
-// New global variables for profile dynamic lists sorting (if needed in future)
-let currentSortColumnEducation = 'graduation_year';
-let currentSortDirectionEducation = 'desc';
-
-let currentSortColumnExperience = 'start_date';
-let currentSortDirectionExperience = 'desc';
-
-
 /**
- * Loads the user profile from the backend API.
- * Initializes the profile object and populates the form.
- * @returns {Promise<void>}
+ * Fetches the user's profile from the backend.
+ * @returns {Promise<object>} A promise that resolves to the user's profile object.
  */
-async function loadProfile() {
+async function fetchProfile() {
     try {
         const response = await fetch('/api/profile');
         if (!response.ok) {
@@ -23,41 +19,62 @@ async function loadProfile() {
         const fetchedProfile = await response.json();
         if (Object.keys(fetchedProfile).length > 0) { // Check if profile is not empty
             profile = fetchedProfile;
-            populateProfileForm();
         } else {
-            profile = { // Initialize with empty lists if no profile exists
+            // Initialize with empty lists if no profile exists on the backend
+            profile = {
                 full_name: "", email: "", phone: "", location: "", summary: "",
                 education: [], experience: [], skills: [], languages: [], certifications: [],
-                linkedin_url: "", github_url: "", portfolio_url: "", "cv_profile_file": "" // Ensure cv_profile_file is initialized
+                linkedin_url: "", github_url: "", portfolio_url: "", cv_profile_file: ""
             };
         }
         // Expose profile globally for dashboard.js and AI services
         window.profile = profile;
+        return profile;
     } catch (error) {
-        console.error('Error loading profile:', error);
+        console.error('Error fetching profile:', error);
         window.showAlert('Failed to load profile. Please try again.', 'error');
-        profile = { // Fallback to empty profile on error
+        // Fallback to empty profile on error to prevent further crashes
+        profile = {
             full_name: "", email: "", phone: "", location: "", summary: "",
             education: [], experience: [], skills: [], languages: [], certifications: [],
-            linkedin_url: "", github_url: "", portfolio_url: "", "cv_profile_file": "" // Ensure cv_profile_file is initialized
+            linkedin_url: "", github_url: "", portfolio_url: "", cv_profile_file: ""
         };
         window.profile = profile; // Ensure global profile is set even on error
+        return profile;
     }
 }
 
 /**
- * Populates the profile form fields with the current profile data.
+ * Loads the user's profile and populates the form fields.
+ */
+async function loadProfile() {
+    await fetchProfile(); // Fetch the latest data
+    populateProfileForm();
+}
+
+/**
+ * Populates the profile form with the current profile data.
  */
 function populateProfileForm() {
-    document.getElementById('profile-full-name').value = profile.full_name || '';
-    document.getElementById('profile-email').value = profile.email || '';
-    document.getElementById('profile-phone').value = profile.phone || '';
-    document.getElementById('profile-location').value = profile.location || '';
-    document.getElementById('profile-summary').value = profile.summary || '';
-    document.getElementById('profile-linkedin').value = profile.linkedin_url || '';
-    document.getElementById('profile-github').value = profile.github_url || '';
-    document.getElementById('profile-portfolio').value = profile.portfolio_url || '';
-    document.getElementById('profile-cv-filename').textContent = profile.cv_profile_file ? `File: ${profile.cv_profile_file.split('/').pop()}` : 'No file uploaded';
+    const profileFullName = document.getElementById('profile-full-name');
+    const profileEmail = document.getElementById('profile-email');
+    const profilePhone = document.getElementById('profile-phone');
+    const profileLocation = document.getElementById('profile-location');
+    const profileSummary = document.getElementById('profile-summary');
+    const profileLinkedin = document.getElementById('profile-linkedin');
+    const profileGithub = document.getElementById('profile-github');
+    const profilePortfolio = document.getElementById('profile-portfolio');
+    const profileCvFilename = document.getElementById('profile-cv-filename');
+
+    if (profileFullName) profileFullName.value = profile.full_name || '';
+    if (profileEmail) profileEmail.value = profile.email || '';
+    if (profilePhone) profilePhone.value = profile.phone || '';
+    if (profileLocation) profileLocation.value = profile.location || '';
+    if (profileSummary) profileSummary.value = profile.summary || '';
+    if (profileLinkedin) profileLinkedin.value = profile.linkedin_url || '';
+    if (profileGithub) profileGithub.value = profile.github_url || '';
+    if (profilePortfolio) profilePortfolio.value = profile.portfolio_url || '';
+    if (profileCvFilename) profileCvFilename.textContent = profile.cv_profile_file ? `File: ${profile.cv_profile_file.split('/').pop()}` : 'No file uploaded';
 
     renderEducation();
     renderExperience();
@@ -67,9 +84,8 @@ function populateProfileForm() {
 }
 
 /**
- * Saves the user profile data to the backend API.
+ * Saves the user's profile to the backend.
  * @param {Event} event The form submission event.
- * @returns {Promise<void>}
  */
 async function saveProfile(event) {
     event.preventDefault();
@@ -96,7 +112,8 @@ async function saveProfile(event) {
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to save profile.');
         }
 
         const savedProfile = await response.json();
@@ -104,22 +121,24 @@ async function saveProfile(event) {
         window.profile = profile; // Update global window.profile
         populateProfileForm(); // Re-populate to ensure consistency
         window.showAlert('Profile saved successfully!', 'success');
+        window.loadDashboardData(); // Reload dashboard data after profile save
     } catch (error) {
         console.error('Error saving profile:', error);
-        window.showAlert('Failed to save profile. Please try again.', 'error');
+        window.showAlert('Failed to save profile: ' + error.message, 'error');
     }
 }
 
 /**
- * Handles the upload of the master CV file for the profile.
+ * Handles CV file selection and upload for the profile.
  * @param {Event} event The file input change event.
- * @returns {Promise<void>}
  */
 async function handleProfileCvUpload(event) {
     const file = event.target.files[0];
+    const profileCvFilename = document.getElementById('profile-cv-filename');
+
     if (!file) {
         profile.cv_profile_file = null; // Clear if no file selected
-        document.getElementById('profile-cv-filename').textContent = 'No file uploaded';
+        if (profileCvFilename) profileCvFilename.textContent = 'No file uploaded';
         return;
     }
 
@@ -136,14 +155,15 @@ async function handleProfileCvUpload(event) {
         }
         const uploadResult = await uploadResponse.json();
         profile.cv_profile_file = uploadResult.path; // Store the path
-        document.getElementById('profile-cv-filename').textContent = `File: ${file.name}`;
+        if (profileCvFilename) profileCvFilename.textContent = `File: ${file.name}`;
         window.showAlert('Profile CV uploaded successfully!', 'success');
     } catch (error) {
         console.error('Error uploading profile CV:', error);
-        window.showAlert('Failed to upload profile CV. ' + error.message, 'error');
+        window.showAlert('Failed to upload profile CV: ' + error.message, 'error');
         profile.cv_profile_file = null; // Clear on error
-        document.getElementById('profile-cv-file').value = ''; // Clear file input
-        document.getElementById('profile-cv-filename').textContent = 'No file uploaded';
+        const profileCvInput = document.getElementById('profile-cv-file');
+        if (profileCvInput) profileCvInput.value = ''; // Clear file input
+        if (profileCvFilename) profileCvFilename.textContent = 'No file uploaded';
     }
 }
 
@@ -155,6 +175,10 @@ async function handleProfileCvUpload(event) {
  */
 function renderEducation() {
     const educationList = document.getElementById('education-list');
+    if (!educationList) {
+        console.error("Education list container not found.");
+        return;
+    }
     educationList.innerHTML = '';
     profile.education.forEach((edu, index) => {
         const item = document.createElement('div');
@@ -183,7 +207,7 @@ function renderEducation() {
 }
 
 /**
- * Adds a new empty education entry to the profile.
+ * Adds a new empty education field to the profile.
  */
 function addEducationField() {
     profile.education.push({ degree: '', institution: '', graduation_year: null, gpa: null });
@@ -192,7 +216,7 @@ function addEducationField() {
 
 /**
  * Removes an education entry from the profile.
- * @param {number} index The index of the entry to remove.
+ * @param {number} index The index of the education entry to remove.
  */
 function removeEducation(index) {
     profile.education.splice(index, 1);
@@ -202,18 +226,23 @@ function removeEducation(index) {
 /**
  * Updates a specific field of an education entry.
  * @param {number} index The index of the education entry.
- * @param {string} field The field name to update.
+ * @param {string} field The field name to update (e.g., 'degree', 'institution').
  * @param {*} value The new value for the field.
  */
 function updateEducationField(index, field, value) {
     profile.education[index][field] = value;
 }
 
+
 /**
  * Renders the experience entries in the profile form.
  */
 function renderExperience() {
     const experienceList = document.getElementById('experience-list');
+    if (!experienceList) {
+        console.error("Experience list container not found.");
+        return;
+    }
     experienceList.innerHTML = '';
     profile.experience.forEach((exp, index) => {
         // Format dates to YYYY-MM for month input type
@@ -250,7 +279,7 @@ function renderExperience() {
 }
 
 /**
- * Adds a new empty experience entry to the profile.
+ * Adds a new empty experience field to the profile.
  */
 function addExperienceField() {
     profile.experience.push({ position: '', company: '', start_date: '', end_date: '', description: '' });
@@ -259,7 +288,7 @@ function addExperienceField() {
 
 /**
  * Removes an experience entry from the profile.
- * @param {number} index The index of the entry to remove.
+ * @param {number} index The index of the experience entry to remove.
  */
 function removeExperience(index) {
     profile.experience.splice(index, 1);
@@ -269,18 +298,23 @@ function removeExperience(index) {
 /**
  * Updates a specific field of an experience entry.
  * @param {number} index The index of the experience entry.
- * @param {string} field The field name to update.
+ * @param {string} field The field name to update (e.g., 'position', 'company').
  * @param {*} value The new value for the field.
  */
 function updateExperienceField(index, field, value) {
     profile.experience[index][field] = value;
 }
 
+
 /**
  * Renders the skills entries in the profile form.
  */
 function renderSkills() {
     const skillsList = document.getElementById('skills-list');
+    if (!skillsList) {
+        console.error("Skills list container not found.");
+        return;
+    }
     skillsList.innerHTML = '';
     profile.skills.forEach((skill, index) => {
         const item = document.createElement('div');
@@ -306,7 +340,7 @@ function renderSkills() {
 }
 
 /**
- * Adds a new empty skill entry to the profile.
+ * Adds a new empty skill field to the profile.
  */
 function addSkillField() {
     profile.skills.push({ name: '', level: 'Intermediate' });
@@ -315,7 +349,7 @@ function addSkillField() {
 
 /**
  * Removes a skill entry from the profile.
- * @param {number} index The index of the entry to remove.
+ * @param {number} index The index of the skill entry to remove.
  */
 function removeSkill(index) {
     profile.skills.splice(index, 1);
@@ -325,18 +359,23 @@ function removeSkill(index) {
 /**
  * Updates a specific field of a skill entry.
  * @param {number} index The index of the skill entry.
- * @param {string} field The field name to update ('name' or 'level').
+ * @param {string} field The field name to update (e.g., 'name', 'level').
  * @param {*} value The new value for the field.
  */
 function updateSkill(index, field, value) {
     profile.skills[index][field] = value;
 }
 
+
 /**
  * Renders the languages entries in the profile form.
  */
 function renderLanguages() {
     const languagesList = document.getElementById('languages-list');
+    if (!languagesList) {
+        console.error("Languages list container not found.");
+        return;
+    }
     languagesList.innerHTML = '';
     profile.languages.forEach((lang, index) => {
         const item = document.createElement('div');
@@ -353,7 +392,7 @@ function renderLanguages() {
 }
 
 /**
- * Adds a new empty language entry to the profile.
+ * Adds a new empty language field to the profile.
  */
 function addLanguageField() {
     profile.languages.push('');
@@ -362,7 +401,7 @@ function addLanguageField() {
 
 /**
  * Removes a language entry from the profile.
- * @param {number} index The index of the entry to remove.
+ * @param {number} index The index of the language entry to remove.
  */
 function removeLanguage(index) {
     profile.languages.splice(index, 1);
@@ -370,19 +409,24 @@ function removeLanguage(index) {
 }
 
 /**
- * Updates a language entry.
+ * Updates a specific language entry.
  * @param {number} index The index of the language entry.
- * @param {string} value The new value for the language.
+ * @param {*} value The new value for the language.
  */
 function updateLanguage(index, value) {
     profile.languages[index] = value;
 }
+
 
 /**
  * Renders the certifications entries in the profile form.
  */
 function renderCertifications() {
     const certificationsList = document.getElementById('certifications-list');
+    if (!certificationsList) {
+        console.error("Certifications list container not found.");
+        return;
+    }
     certificationsList.innerHTML = '';
     profile.certifications.forEach((cert, index) => {
         const item = document.createElement('div');
@@ -399,7 +443,7 @@ function renderCertifications() {
 }
 
 /**
- * Adds a new empty certification entry to the profile.
+ * Adds a new empty certification field to the profile.
  */
 function addCertificationField() {
     profile.certifications.push('');
@@ -408,7 +452,7 @@ function addCertificationField() {
 
 /**
  * Removes a certification entry from the profile.
- * @param {number} index The index of the entry to remove.
+ * @param {number} index The index of the certification entry to remove.
  */
 function removeCertification(index) {
     profile.certifications.splice(index, 1);
@@ -416,15 +460,16 @@ function removeCertification(index) {
 }
 
 /**
- * Updates a certification entry.
+ * Updates a specific certification entry.
  * @param {number} index The index of the certification entry.
- * @param {string} value The new value for the certification.
+ * @param {*} value The new value for the certification.
  */
 function updateCertification(index, value) {
     profile.certifications[index] = value;
 }
 
-// Expose functions to the global scope
+// Expose functions to the global scope for access from other modules and HTML
+window.fetchProfile = fetchProfile;
 window.loadProfile = loadProfile;
 window.saveProfile = saveProfile;
 window.handleProfileCvUpload = handleProfileCvUpload;
@@ -443,3 +488,5 @@ window.updateLanguage = updateLanguage;
 window.addCertificationField = addCertificationField;
 window.removeCertification = removeCertification;
 window.updateCertification = updateCertification;
+
+console.log("profile.js loaded and functions exposed.");
