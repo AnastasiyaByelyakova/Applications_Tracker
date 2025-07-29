@@ -107,7 +107,6 @@ async function estimateJobChance() {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
                 job_description: jobDescription,
-                profile: JSON.stringify(window.profile), // Send profile as JSON string
                 ai_provider: aiProvider,
                 api_key: apiKey
             })
@@ -256,7 +255,8 @@ async function sendInterviewChatMessage() {
     interviewChatHistory.push({ role: 'user', content: userMessageText });
     chatInput.value = ''; // Clear input
 
-    showLoading('qa-loading', 'qa-result-placeholder'); // qa-result-placeholder is just a dummy, result goes to chatDisplay
+    // Use window.showLoading from utils.js
+    window.showLoading('qa-loading', 'qa-result-placeholder'); // qa-result-placeholder is just a dummy, result goes to chatDisplay
 
     try {
         const response = await fetch('/api/ai/interview-qa', {
@@ -281,6 +281,7 @@ async function sendInterviewChatMessage() {
         appendChatMessage(aiResponseText, 'bot');
         interviewChatHistory.push({ role: 'assistant', content: aiResponseText }); // Add AI response to history
 
+        // Use window.hideLoadingHideResult or directly hide loading
         document.getElementById('qa-loading').style.display = 'none'; // Hide loading
         chatDisplay.scrollTop = chatDisplay.scrollHeight; // Scroll to bottom
     } catch (error) {
@@ -397,27 +398,30 @@ async function craftInterviewQuestions() {
  * Researches company website.
  */
 async function researchCompanyWebsite() {
-    const companyUrl = document.getElementById('company-url-research').value;
+    const websiteText = document.getElementById('company-website-text').value; // Changed ID
     const { aiProvider, apiKey } = getAiConfig('company-research');
+    console.log(websiteText);
+    console.log(aiProvider);
+    console.log(apiKey);
 
-    if (!companyUrl || !apiKey) {
-        window.showAlert('Please provide company URL and API Key.', 'error');
+    if (!websiteText || !apiKey) { // Changed validation
+        window.showAlert('Please provide website text and API Key.', 'error'); // Changed message
         return;
     }
 
-    showLoading('company-research-loading', 'company-research-result');
+    window.showLoading('company-research-loading', 'company-research-result'); // Use global showLoading
 
     try {
         const response = await fetch('/api/ai/company-research', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
-                company_url: companyUrl,
+                website_text: websiteText, // Changed parameter name
                 ai_provider: aiProvider,
                 api_key: apiKey
             })
         });
-
+        console.log(response);
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.detail || 'Failed to research company.');
@@ -427,11 +431,11 @@ async function researchCompanyWebsite() {
         console.log('researchCompanyWebsite: Raw AI response data:', data); // Log the raw data
         const formattedResult = window.formatAiResultToHtml(data.result);
         console.log('researchCompanyWebsite: Formatted result HTML:', formattedResult); // Log formatted HTML
-        hideLoadingShowResult('company-research-loading', 'company-research-result', formattedResult);
+        window.hideLoadingShowResult('company-research-loading', 'company-research-result', formattedResult); // Use global hideLoadingShowResult
         window.showAlert('Company research completed successfully!', 'success');
     } catch (error) {
         console.error('Error researching company:', error);
-        hideLoadingShowResult('company-research-loading', 'company-research-result', `<p class="text-error">Error: ${error.message}</p>`);
+        window.hideLoadingShowResult('company-research-loading', 'company-research-result', `<p class="text-error">Error: ${error.message}</p>`); // Use global hideLoadingShowResult
         window.showAlert('Failed to research company. ' + error.message, 'error');
     }
 }

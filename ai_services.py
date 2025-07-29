@@ -3,7 +3,8 @@ import google.generativeai as genai
 import anthropic
 from typing import Dict, Any, List, Optional
 import json, re
-from models import * # Ensure UserProfile model is imported
+from models import *  # Ensure UserProfile model is imported
+
 
 def parse_response_to_json(response: str) -> Dict[str, Any]:
     """
@@ -71,7 +72,56 @@ class AIService:
 
         response = chat.send_message(prompt)
 
-        return "\n".join(i.text for i in response.candidates[0].content.parts)
+        if response.candidates:
+            candidate = response.candidates[0]
+            if candidate.content and candidate.content.parts:
+                # Check for tool_calls
+                if hasattr(candidate.content, 'tool_calls') and candidate.content.tool_calls:
+                    tool_outputs = []
+                    for tool_call in candidate.content.tool_calls:
+                        tool_name = tool_call.function.name
+                        tool_args = tool_call.function.args
+                        print(f"Gemini calling tool: {tool_name} with args: {tool_args}")
+
+                        # Dynamically call the tool function
+                        if tool_name == "google_search_search":
+                            # Ensure 'queries' is a list as expected by google_search.search
+                            queries = tool_args.get('queries')
+                            if not isinstance(queries, list):
+                                queries = [queries] if queries is not None else []
+                            search_results = google_search.search(queries=queries)
+                            tool_outputs.append(
+                                genai.types.ToolOutput(
+                                    tool_code=tool_call.function,
+                                    content={"search_results": [sr.dict() for sr in search_results]}
+                                )
+                            )
+                        elif tool_name == "browsing_browse":
+                            # This branch should ideally not be hit if browsing tool is removed for company research
+                            browsing_result = await browsing.browse(query=tool_args.get('query'),
+                                                                    url=tool_args.get('url'))
+                            tool_outputs.append(
+                                genai.types.ToolOutput(
+                                    tool_code=tool_call.function,
+                                    content={"browsing_result": browsing_result}
+                                )
+                            )
+                        else:
+                            tool_outputs.append(
+                                genai.types.ToolOutput(
+                                    tool_code=tool_call.function,
+                                    content={"error": f"Unknown tool: {tool_name}"}
+                                )
+                            )
+
+                    # Send tool outputs back to the model
+                    response_with_tool_output = await chat.send_message(tool_outputs)
+                    if response_with_tool_output.candidates and response_with_tool_output.candidates[0].content:
+                        return response_with_tool_output.candidates[0].content.parts[0].text
+                    else:
+                        return "AI did not return a response after tool execution."
+                else:
+                    return candidate.content.parts[0].text
         return "No response from AI."
 
     async def _call_openai(self, model_name: str, prompt: str, api_key: str, chat_history: Optional[List[Dict]] = None,
@@ -114,6 +164,7 @@ class AIService:
                             "output": {"search_results": [sr.dict() for sr in search_results]}
                         })
                     elif function_name == "browsing":
+                        # This branch should ideally not be hit if browsing tool is removed for company research
                         browsing_result = await browsing.browse(query=function_args.get('query'),
                                                                 url=function_args.get('url'))
                         tool_outputs.append({
@@ -191,6 +242,7 @@ class AIService:
                             "content": {"search_results": [sr.dict() for sr in search_results]}
                         })
                     elif tool_name == "browsing":
+                        # This branch should ideally not be hit if browsing tool is removed for company research
                         browsing_result = await browsing.browse(query=tool_input.get('query'),
                                                                 url=tool_input.get('url'))
                         tool_outputs.append({
@@ -226,10 +278,7 @@ class AIService:
                              chat_history: Optional[List[Dict]] = None, tools: Optional[List[Dict]] = None,
                              system_instruction: Optional[str] = None) -> str:
         if ai_provider == "gemini":
-            return self._call_gemini_pro(prompt,
-                                         api_key,
-                                         tools=tools,
-                                         system_instruction=system_instruction,
+            return await self._call_gemini_pro(prompt, api_key, tools=tools, system_instruction=system_instruction,
                                                chat_history=chat_history)
         elif ai_provider == "openai":
             return await self._call_openai(model_name, prompt, api_key, chat_history=chat_history, tools=tools,
@@ -241,9 +290,9 @@ class AIService:
             raise ValueError("Unsupported AI provider.")
 
     # Modified to accept Dict[str, Any] for user_profile
-    async def estimate_job_chance(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str, api_key: str) -> str:
-        # profile_data = json.loads(user_profile) # REMOVED: main.py now sends dict directly
-        formatted_profile = self._format_profile_for_prompt(user_profile) # Use user_profile directly
+    async def estimate_job_chance(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str,
+                                  api_key: str) -> str:
+        formatted_profile = self._format_profile_for_prompt(user_profile)
 
         prompt = f"""
         You are an AI assistant specialized in career counseling.
@@ -263,8 +312,8 @@ class AIService:
         return await self._call_ai_model(ai_provider, model_name, prompt, api_key)
 
     # Modified to accept Dict[str, Any] for user_profile
-    async def tune_cv_for_job(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str, api_key: str) -> str:
-        # profile_data = json.loads(user_profile) # REMOVED
+    async def tune_cv_for_job(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str,
+                              api_key: str) -> str:
         formatted_profile = self._format_profile_for_prompt(user_profile)
 
         prompt = f"""
@@ -287,7 +336,6 @@ class AIService:
     # Modified to accept Dict[str, Any] for user_profile
     async def generate_cover_letter(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str,
                                     api_key: str) -> str:
-        # profile_data = json.loads(user_profile) # REMOVED
         formatted_profile = self._format_profile_for_prompt(user_profile)
 
         prompt = f"""
@@ -308,18 +356,12 @@ class AIService:
         return await self._call_ai_model(ai_provider, model_name, prompt, api_key)
 
     # Modified to accept List[Dict] for chat_history, and Dict[str, Any] for user_profile
-    async def interview_qa(self, job_title: str, user_profile: Dict[str, Any], chat_history: List[Dict], ai_provider: str,
+    async def interview_qa(self, job_title: str, user_profile: Dict[str, Any], chat_history: List[Dict],
+                           ai_provider: str,
                            api_key: str) -> str:
-        # profile_data = json.loads(user_profile) # REMOVED
         formatted_profile = self._format_profile_for_prompt(user_profile)
-        # history = json.loads(chat_history)  # REMOVED: chat_history is already a list of dicts
 
-        # Constructing the full prompt for the AI based on history and new user input
-        # The last message in history is the current user's message
         current_user_message = chat_history[-1]['content'] if chat_history else ""
-
-        # Remove the last user message from history for passing to AI models
-        # as it's passed as the 'prompt' argument.
         cleaned_history = chat_history[:-1] if chat_history else []
 
         system_instruction = f"""
@@ -338,8 +380,8 @@ class AIService:
                                          chat_history=cleaned_history, system_instruction=system_instruction)
 
     # Modified to accept Dict[str, Any] for user_profile
-    async def extract_job_skills(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str, api_key: str) -> str:
-        # profile_data = json.loads(user_profile) # REMOVED
+    async def extract_job_skills(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str,
+                                 api_key: str) -> str:
         formatted_profile = self._format_profile_for_prompt(user_profile)
 
         prompt = f"""
@@ -375,48 +417,30 @@ class AIService:
         model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-3.5-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"  # Default models
         return await self._call_ai_model(ai_provider, model_name, prompt, api_key)
 
-    async def research_company_website(self, company_url: str, ai_provider: str, api_key: str) -> str:
-        # Define the tools available to the model
-        tools = [
-            {
-                "function_declarations": [
-                    {
-                        "name": "browsing",
-                        "description": "Browse a given URL and return its text content.",
-                        "parameters": {
-                            "type": "OBJECT",
-                            "properties": {
-                                "query": {"type": "STRING",
-                                          "description": "A search query related to the content you want to find on the page."},
-                                "url": {"type": "STRING", "description": "The URL to browse."}
-                            },
-                            "required": ["url"]
-                        }
-                    }
-                ]
-            }
-        ]
+    # Modified to accept website_text instead of company_url and remove browsing tool
+    async def research_company_website(self, website_text: str, ai_provider: str, api_key: str) -> str:
+        # No tools needed as website_text is directly provided
+        tools = None
 
         prompt = f"""
         You are an AI assistant specialized in company research.
-        Your task is to extract key information from the provided company website URL.
+        Your task is to extract key information from the provided website text.
         Focus on identifying the company's mission, values, main products/services, recent news or achievements, and general culture.
-        Use the 'browsing' tool to fetch the content of the URL.
 
-        Company Website URL: {company_url}
+        Website Content:
+        {website_text}
 
-        After browsing, summarize the key findings in a structured markdown format.
-        If you cannot access the URL or find relevant information, state that clearly.
+        Summarize the key findings in a structured markdown format.
+        If you cannot find relevant information, state that clearly.
         """
-        model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-4-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"  # Models capable of tool use
-
-        # Call the AI model with the browsing tool
+        # Using a model capable of processing longer texts if needed, but not necessarily tool-use specific
+        model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-4-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"
+        print(model_name)
+        # Call the AI model without the browsing tool
         return await self._call_ai_model(ai_provider, model_name, prompt, api_key, tools=tools)
 
-    # Modified to accept Dict[str, Any] for user_profile
     async def generate_about_me_answer(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str,
                                        api_key: str) -> str:
-        # profile_data = json.loads(user_profile) # REMOVED
         formatted_profile = self._format_profile_for_prompt(user_profile)
 
         prompt = f"""
@@ -433,7 +457,7 @@ class AIService:
         Provide the "About Me" answer in markdown format.
         """
         model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-3.5-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"  # Default models
-        return self._call_ai_model(ai_provider, model_name, prompt, api_key)
+        return await self._call_ai_model(ai_provider, model_name, prompt, api_key)
 
     async def fill_profile_from_resume(self, resume_content: bytes, ai_provider: str, api_key: str) -> Dict[str, Any]:
         print(f"fill_profile_from_resume called. AI Provider: {ai_provider}")
@@ -448,12 +472,7 @@ class AIService:
             # Here you would integrate a PDF text extraction library.
             # For now, we'll indicate that it's binary data to the LLM.
             print("Could not decode resume content as UTF-8. Assuming binary PDF content.")
-            # If using models that accept image/PDF data directly (like some Gemini Vision models),
-            # you'd pass the raw bytes here. For text-only models, you MUST extract text first.
-            # Let's assume for this prompt, the LLM is smart enough to handle the binary data hint,
-            # or that the user will provide text/a simple PDF.
             resume_text = "The provided resume content is a binary file (e.g., PDF). Please extract information from it. If direct text extraction is not possible for you, state that."
-
 
         print(f"Resume text for AI processing (first 200 chars): {resume_text[:200]}...")
 
@@ -475,7 +494,7 @@ class AIService:
         model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-4-turbo-preview" if ai_provider == "openai" else "claude-3-opus-20240229"  # Models best for structured output
 
         # Call AI model to get JSON response
-        ai_response_text = self._call_ai_model(ai_provider, model_name, prompt, api_key)
+        ai_response_text = await self._call_ai_model(ai_provider, model_name, prompt, api_key)
 
         print(f"Raw AI response for profile fill: {ai_response_text}")
 
@@ -493,7 +512,10 @@ class AIService:
         formatted_str = "--- User Profile ---\n"
         for key, value in profile_data.items():
             if value:  # Only include non-empty fields
-                if isinstance(value, list) and key in ['education', 'experience', 'skills', 'languages',
+                if isinstance(value, list) and key in ['education',
+                                                       'experience',
+                                                       'skills',
+                                                       'languages',
                                                        'certifications']:
                     if key == 'education':
                         formatted_str += "Education:\n"

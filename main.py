@@ -320,14 +320,15 @@ async def delete_interview(interview_id: str):
 @app.post("/api/ai/estimate-chance")
 async def estimate_job_chance_ai(
         job_description: Annotated[str, Form()],
-        profile: Annotated[str, Form()],  # profile comes as a JSON string
         ai_provider: Annotated[AIProvider, Form()],
         api_key: Annotated[str, Form()]
 ):
     """Estimates job chance using AI."""
+    print(db.get_user_profile())
     try:
         # Parse the profile JSON string back into a dictionary
-        profile_data = json.loads(profile)
+        profile_data = await db.get_user_profile()
+        profile_data = profile_data.model_dump()
         # Assuming AIService expects a dict for profile
         result = await ai_service.estimate_job_chance(
             user_profile=profile_data,
@@ -351,7 +352,8 @@ async def tune_cv_ai(
 ):
     """Tunes CV for a job description using AI."""
     try:
-        profile_data = json.loads(profile)
+        profile_data = await db.get_user_profile()
+        profile_data = profile_data.model_dump()
         result = await ai_service.tune_cv_for_job(
             user_profile=profile_data,
             job_description=job_description,
@@ -374,7 +376,8 @@ async def generate_cover_letter_ai(
 ):
     """Generates a cover letter using AI."""
     try:
-        profile_data = json.loads(profile)
+        profile_data = await db.get_user_profile()
+        profile_data = profile_data.model_dump()
         result = await ai_service.generate_cover_letter(
             user_profile=profile_data,
             job_description=job_description,
@@ -388,7 +391,7 @@ async def generate_cover_letter_ai(
         raise HTTPException(status_code=500, detail=f"AI cover letter generation failed: {e}")
 
 
-@app.post("/api/ai/interview-chat", response_model=Dict[str, str])
+@app.post("/api/ai/interview-qa", response_model=Dict[str, str])
 async def interview_chat_ai(
         job_title: Annotated[str, Form()],
         chat_history: Annotated[str, Form()],  # chat_history comes as a JSON string
@@ -397,9 +400,12 @@ async def interview_chat_ai(
 ):
     """Handles interview Q&A chat using AI."""
     try:
+        profile_data = await db.get_user_profile()
+        profile_data = profile_data.model_dump()
         chat_history_data = json.loads(chat_history)
-        result = await ai_service.interview_qa_chat(
+        result = await ai_service.interview_qa(
             job_title=job_title,
+            user_profile=profile_data,
             chat_history=chat_history_data,
             ai_provider=ai_provider,
             api_key=api_key
@@ -454,17 +460,19 @@ async def craft_interview_questions_ai(
 
 @app.post("/api/ai/company-research", response_model=Dict[str, str])
 async def research_company_website_ai(
-        company_url: Annotated[str, Form()],
+        website_text: Annotated[str, Form()],
         ai_provider: Annotated[AIProvider, Form()],
         api_key: Annotated[str, Form()]
 ):
     """Researches company website using AI."""
+    print('COMPANY@')
     try:
         result = await ai_service.research_company_website(
-            company_url=company_url,
+            website_text=website_text,
             ai_provider=ai_provider,
             api_key=api_key
         )
+        print(result)
         return {"result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI company research failed: {e}")
@@ -493,7 +501,7 @@ async def generate_about_me_answer_ai(
         raise HTTPException(status_code=500, detail=f"AI 'About Me' generation failed: {e}")
 
 
-@app.post("/api/ai/fill-profile-from-resume", response_model=UserProfile)
+@app.post("/api/ai/profile/fill-from-resume-ai", response_model=UserProfile)
 async def fill_profile_from_resume_ai(
         api_key: Annotated[str, Form()],
         ai_provider: Annotated[AIProvider, Form()],
