@@ -452,7 +452,7 @@ async def craft_interview_questions_ai(
         raise HTTPException(status_code=500, detail=f"AI interview question crafting failed: {e}")
 
 
-@app.post("/api/ai/research-company", response_model=Dict[str, str])
+@app.post("/api/ai/company-research", response_model=Dict[str, str])
 async def research_company_website_ai(
         company_url: Annotated[str, Form()],
         ai_provider: Annotated[AIProvider, Form()],
