@@ -154,7 +154,155 @@ function openHtmlResultWindow(title, contentHtml) {
         showAlert('Pop-up blocked! Please allow pop-ups for this site to view the results.', 'error');
     }
 }
+/**
+ * Utility functions for common UI interactions and helpers.
+ * These functions are exposed globally via the window object.
+ */
 
+/**
+ * Shows a loading indicator and hides a result box.
+ * @param {string} loadingId The ID of the loading indicator element.
+ * @param {string} resultId The ID of the result box element.
+ */
+function showLoading(loadingId, resultId) {
+    const loadingElement = document.getElementById(loadingId);
+    const resultElement = document.getElementById(resultId);
+
+    if (loadingElement) {
+        loadingElement.style.display = 'block';
+    } else {
+        console.warn(`Loading element with ID '${loadingId}' not found.`);
+    }
+
+    if (resultElement) {
+        resultElement.style.display = 'none';
+        resultElement.innerHTML = ''; // Clear previous results
+    } else {
+        console.warn(`Result element with ID '${resultId}' not found.`);
+    }
+}
+
+/**
+ * Hides a loading indicator and shows a result box with content.
+ * @param {string} loadingId The ID of the loading indicator element.
+ * @param {string} resultId The ID of the result box element.
+ * @param {string} content The HTML content to put into the result box.
+ */
+function hideLoadingShowResult(loadingId, resultId, content) {
+    const loadingElement = document.getElementById(loadingId);
+    const resultElement = document.getElementById(resultId);
+
+    if (loadingElement) {
+        loadingElement.style.display = 'none';
+    } else {
+        console.warn(`Loading element with ID '${loadingId}' not found.`);
+    }
+
+    if (resultElement) {
+        resultElement.innerHTML = content;
+        resultElement.style.display = 'block';
+    } else {
+        console.warn(`Result element with ID '${resultId}' not found.`);
+    }
+}
+
+/**
+ * Hides both a loading indicator and a result box.
+ * Useful for clearing messages after success or when closing forms.
+ * @param {string} loadingId The ID of the loading indicator element.
+ * @param {string} resultId The ID of the result box element.
+ */
+function hideLoadingHideResult(loadingId, resultId) {
+    const loadingElement = document.getElementById(loadingId);
+    const resultElement = document.getElementById(resultId);
+
+    if (loadingElement) {
+        loadingElement.style.display = 'none';
+    } else {
+        console.warn(`Loading element with ID '${loadingId}' not found.`);
+    }
+
+    if (resultElement) {
+        resultElement.style.display = 'none';
+        resultElement.innerHTML = ''; // Clear content
+    } else {
+        console.warn(`Result element with ID '${resultId}' not found.`);
+    }
+}
+
+
+/**
+ * Displays a custom alert message to the user.
+ * @param {string} message The message to display.
+ * @param {string} type The type of alert ('success', 'error', 'warning', 'info').
+ */
+function showAlert(message, type = 'info') {
+    // Implement a more sophisticated alert system if needed (e.g., a toast notification)
+    // For now, let's just log to console and potentially use a simple div if available
+    console.log(`ALERT (${type.toUpperCase()}): ${message}`);
+
+    const alertContainer = document.getElementById('global-alert-container'); // Assuming you might add this to index.html
+    if (alertContainer) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type}`; // Add CSS classes for styling
+        alertDiv.textContent = message;
+        alertContainer.appendChild(alertDiv);
+
+        // Automatically remove the alert after a few seconds
+        setTimeout(() => {
+            alertContainer.removeChild(alertDiv);
+        }, 5000); // 5 seconds
+    } else {
+        // Fallback if no specific alert container is defined
+        // You might want to use a simple modal or just console.log for now
+        // For this context, we'll rely on console.log and the global confirm modal for critical messages.
+    }
+}
+
+/**
+ * Shows a global confirmation modal.
+ * @param {string} message The message to display in the confirmation modal.
+ * @param {Function} onConfirm Callback function to execute if 'Yes' is clicked.
+ * @param {Function} [onCancel] Optional callback function to execute if 'No' is clicked.
+ */
+function showConfirm(message, onConfirm, onCancel = () => {}) {
+    // Ensure global modal elements are available (set in app.js on DOMContentLoaded)
+    if (!window.globalConfirmModal || !window.globalConfirmMessage || !window.globalConfirmYesBtn || !window.globalConfirmNoBtn) {
+        console.error("Global confirmation modal elements not initialized. Cannot show confirm dialog.");
+        // Fallback to a simple JS confirm if the custom modal isn't ready
+        if (confirm(message)) {
+            onConfirm();
+        } else {
+            onCancel();
+        }
+        return;
+    }
+
+    window.globalConfirmMessage.textContent = message;
+    window.globalConfirmModal.classList.add('active'); // Show the modal
+
+    // Clear previous listeners to prevent multiple calls
+    window.globalConfirmYesBtn.onclick = null;
+    window.globalConfirmNoBtn.onclick = null;
+
+    window.globalConfirmYesBtn.onclick = () => {
+        window.globalConfirmModal.classList.remove('active');
+        onConfirm();
+    };
+
+    window.globalConfirmNoBtn.onclick = () => {
+        window.globalConfirmModal.classList.remove('active');
+        onCancel();
+    };
+}
+
+
+// Expose functions to the global scope
+window.showLoading = showLoading;
+window.hideLoadingShowResult = hideLoadingShowResult;
+window.hideLoadingHideResult = hideLoadingHideResult;
+window.showAlert = showAlert;
+window.showConfirm = showConfirm;
 // Expose utility functions to the global scope if needed by other modules or HTML
 window.showAlert = showAlert;
 // window.showConfirm = showConfirm; // Removed: Handled by app.js global initialization

@@ -3,15 +3,7 @@ import google.generativeai as genai
 import anthropic
 from typing import Dict, Any, List, Optional
 import json, re
-import base64
-import io  # Import io for BytesIO
-from urllib.parse import urlparse
-
-# Import the browsing tool
-import browsing
-
-from models import UserProfile, AIProvider, Education, Experience, Skill
-
+from models import * # Ensure UserProfile model is imported
 
 def parse_response_to_json(response: str) -> Dict[str, Any]:
     """
@@ -19,13 +11,13 @@ def parse_response_to_json(response: str) -> Dict[str, Any]:
     Handles common formatting issues from LLM outputs.
     """
     # 1. Try to find a JSON block (```json ... ```)
-    json_match = re.search(r'```json\s*(\{.*\}|\[.*\])\s*```', response, re.DOTALL)
+    json_match = re.search(r'```json\s*(\{|\[).*?(\]|\})\s*```', response, re.DOTALL)
     if json_match:
-        json_text = json_match.group(1)
+        json_text = json_match.group(1) + json_match.group(2)  # Reconstruct the full JSON
     else:
         # 2. Fallback: Try to find a standalone JSON object or array
         # This regex is more permissive to catch JSON that isn't wrapped in ```json
-        json_text_match = re.search(r'(\{.*\}|\[.*\])', response, re.DOTALL)
+        json_text_match = re.search(r'(\{|\[).*?(\]|\})', response, re.DOTALL)
         if json_text_match:
             json_text = json_text_match.group(0)
         else:
@@ -33,525 +25,490 @@ def parse_response_to_json(response: str) -> Dict[str, Any]:
 
     # 3. Attempt to parse the extracted text as JSON
     try:
-        # First, try a direct parse. This is the cleanest if the AI is well-behaved.
-        parsed_data = json.loads(json_text)
-        return parsed_data
+        # First, try a direct parse. This might fail if there are trailing commas or other non-standard JSON.
+        return json.loads(json_text)
     except json.JSONDecodeError as e:
-        print(f"Initial JSON parse failed: {e}. Attempting cleanup...")
-        print(f"Problematic JSON text: {json_text}")
-
-        # 4. If direct parse fails, apply common LLM output fixes
-        cleaned_json_text = json_text
-
-        # Fix unescaped newlines within strings (replace with actual newline escape)
-        # This is a common issue for "unterminated string literal"
-        cleaned_json_text = cleaned_json_text.replace('\n', '\\n').replace('\t', '\\t')
-
-        # Replace single quotes with double quotes for string values and keys
-        # This regex is more specific to avoid replacing apostrophes within words
-        # It targets single quotes that are likely intended as string delimiters
-        cleaned_json_text = re.sub(r"(?<!\\)'([^']*)'(?!:)", r'"\1"', cleaned_json_text)  # For values
-        cleaned_json_text = re.sub(r"([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:", r'\1"\2":',
-                                   cleaned_json_text)  # For unquoted keys
-
-        # Handle trailing commas (common in LLM JSON)
-        cleaned_json_text = re.sub(r',(\s*[}\]])', r'\1', cleaned_json_text)
-
-        # Replace Python-style None/True/False with JSON null/true/false
-        cleaned_json_text = cleaned_json_text.replace('None', 'null')
-        cleaned_json_text = cleaned_json_text.replace('True', 'true')
-        cleaned_json_text = cleaned_json_text.replace('False', 'false')
-
-        # Remove any leading/trailing whitespace that might interfere
-        cleaned_json_text = cleaned_json_text.strip()
-
-        # Try parsing again with the cleaned text
+        # Fallback for common LLM JSON issues (e.g., trailing commas, unquoted keys/values)
+        print(f"Initial JSON parse failed: {e}. Attempting to clean and re-parse.")
+        # A more robust cleaning might involve a dedicated library or more complex regex
+        # For now, a simple attempt to remove trailing commas in objects/arrays
+        cleaned_json_text = re.sub(r',\s*([}\]])', r'\1', json_text)
         try:
-            parsed_data = json.loads(cleaned_json_text)
-            return parsed_data
+            return json.loads(cleaned_json_text)
         except json.JSONDecodeError as e_cleaned:
-            print(f"Cleaned JSON parse failed: {e_cleaned}")
-            print(f"Cleaned problematic JSON text: {cleaned_json_text}")
-            raise ValueError(f"Failed to parse AI response to JSON after cleanup: {e_cleaned}")
-    except Exception as e:
-        # Catch any other unexpected errors during the process
-        print(f"An unexpected error occurred during JSON parsing: {e}")
-        raise ValueError(f"An unexpected error occurred during JSON parsing: {e}")
+            raise ValueError(f"Failed to parse JSON even after cleaning: {e_cleaned}\nOriginal text: {response}")
 
 
 class AIService:
-
     def __init__(self):
-        # Initialize clients for different AI providers
-        self.openai_client = None  # Initialize lazily or with API key
-        self.anthropic_client = None  # Initialize lazily or with API key
+        self.openai_client = None
+        self.anthropic_client = None
 
-    def _format_profile_for_ai(self, profile: UserProfile) -> str:
-        """Format user profile for AI consumption"""
-        profile_text = f"""
-Full Name: {profile.full_name}
-Email: {profile.email}
-Phone: {profile.phone}
-Location: {profile.location}
-Summary: {profile.summary}
+    def _get_openai_client(self, api_key: str):
+        if not self.openai_client or self.openai_client.api_key != api_key:
+            self.openai_client = openai.AsyncOpenAI(api_key=api_key)
+        return self.openai_client
 
-Education:
-"""
+    def _get_anthropic_client(self, api_key: str):
+        if not self.anthropic_client or self.anthropic_client.api_key != api_key:
+            self.anthropic_client = anthropic.AsyncAnthropic(api_key=api_key)
+        return self.anthropic_client;
 
-        if not profile.education:
-            profile_text += "- No education entries.\\n"
-        for edu in profile.education:
-            profile_text += f"- {edu.degree} from {edu.institution} ({edu.graduation_year})"
-            if edu.gpa:
-                profile_text += f" GPA: {edu.gpa}"
-            profile_text += "\\n"
+    async def _call_gemini_pro(self, prompt: str, api_key: str, tools: Optional[List[Dict]] = None,
+                               system_instruction: Optional[str] = None,
+                               chat_history: Optional[List[Dict]] = None) -> str:
+        genai.configure(api_key=api_key)
 
-        profile_text += "\\nExperience:\\n"
-        if not profile.experience:
-            profile_text += "- No experience entries.\\n"
-        for exp in profile.experience:
-            end_date = exp.end_date if exp.end_date else "Present"
-            profile_text += f"- {exp.position} at {exp.company} ({exp.start_date} - {end_date})\\n"
-            profile_text += f"  Description: {exp.description}\\n"
+        # Prepare history for Gemini
+        gemini_history = []
+        if chat_history:
+            for msg in chat_history:
+                # Gemini expects 'parts' to be a list, even for single text parts
+                gemini_history.append({"role": msg["role"], "parts": [msg["content"]]})
 
-        profile_text += "\\nSkills:\\n"
-        if not profile.skills:
-            profile_text += "- No skill entries.\\n"
-        for skill in profile.skills:
-            profile_text += f"- {skill.name} ({skill.level})\\n"
+        model = genai.GenerativeModel('gemini-2.0-flash', tools=tools, system_instruction=system_instruction)
+        chat = model.start_chat(history=gemini_history)
 
-        if profile.languages:
-            profile_text += f"\\nLanguages: {', '.join(profile.languages)}\\n"
+        response = chat.send_message(prompt)
 
-        if profile.certifications:
-            profile_text += f"\\nCertifications: {', '.join(profile.certifications)}\\n"
+        return "\n".join(i.text for i in response.candidates[0].content.parts)
+        return "No response from AI."
 
-        if profile.linkedin_url:
-            profile_text += f"\\nLinkedIn: {profile.linkedin_url}\\n"
-        if profile.github_url:
-            profile_text += f"\\nGitHub: {profile.github_url}\\n"
-        if profile.portfolio_url:
-            profile_text += f"\\nPortfolio: {profile.portfolio_url}\\n"
+    async def _call_openai(self, model_name: str, prompt: str, api_key: str, chat_history: Optional[List[Dict]] = None,
+                           tools: Optional[List[Dict]] = None, system_instruction: Optional[str] = None) -> str:
+        client = self._get_openai_client(api_key)
+        messages = []
+        if system_instruction:
+            messages.append({"role": "system", "content": system_instruction})
 
-        return profile_text
+        if chat_history:
+            messages.extend(chat_history)
 
-    async def _call_ai_provider(self, prompt: str, ai_provider: AIProvider, api_key: str,
-                                model_args: Dict[str, Any] = None,
-                                messages: Optional[List[Dict[str, str]]] = None) -> str:
-        """Helper to call various AI providers"""
-        if model_args is None:
-            model_args = {}
-
-        # Ensure messages list is mutable for modification
-        if messages is None:
-            messages = []
-        else:
-            # Create a copy to avoid modifying the original list passed in
-            messages = list(messages)
-
-            # Append the current prompt as the latest user message
         messages.append({"role": "user", "content": prompt})
 
-        if ai_provider == AIProvider.OPENAI:
-            if not self.openai_client:
-                openai.api_key = api_key
-            try:
-                response = await openai.ChatCompletion.acreate(
-                    model=model_args.get("model", "gpt-3.5-turbo"),
-                    messages=messages,
-                    max_tokens=model_args.get("max_tokens", 1000)
-                )
-                return response.choices[0].message['content']
-            except Exception as e:
-                raise Exception(f"OpenAI API error: {e}")
+        try:
+            response = await client.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                tools=tools if tools else None,
+                tool_choice="auto" if tools else "none",
+            )
 
-        elif ai_provider == AIProvider.GEMINI:
-            genai.configure(api_key=api_key)
-            try:
-                model = genai.GenerativeModel(model_name=model_args.get("model", "gemini-2.0-flash"))
-                # Gemini expects messages in a specific format for chat history
-                # It does not support 'system' role. Alternating 'user' and 'model' roles.
-                gemini_messages = []
-                for m in messages:
-                    if m["role"] == "user":
-                        gemini_messages.append({"role": "user", "parts": [m["content"]]})
-                    elif m["role"] == "assistant":  # Assuming 'assistant' role maps to 'model' for Gemini
-                        gemini_messages.append({"role": "model", "parts": [m["content"]]})
-                    # Ignore 'system' role if present, as it's handled by prompt modification
+            response_message = response.choices[0].message
+            if response_message.tool_calls:
+                tool_outputs = []
+                for tool_call in response_message.tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments)
+                    print(f"OpenAI calling tool: {function_name} with args: {function_args}")
 
-                response = await model.generate_content_async(gemini_messages)
-                return response.text
-            except Exception as e:
-                raise Exception(f"Gemini API error: {e}")
-
-        elif ai_provider == AIProvider.CLAUDE:
-            if not self.anthropic_client:
-                self.anthropic_client = anthropic.AsyncAnthropic(api_key=api_key)
-            try:
-                # Claude expects messages in a specific format for chat history
-                claude_messages = []
-                for m in messages:
-                    if m["role"] == "system":
-                        # Claude's system message is a top-level parameter
-                        # For simplicity here, we'll prepend it to the first user message if not already handled.
-                        # A more robust solution might pass it as `system` parameter to Anthropic client.
-                        pass
+                    # Dynamically call the tool function
+                    if function_name == "google_search":
+                        # Ensure 'queries' is a list as expected by google_search.search
+                        queries = function_args.get('queries')
+                        if not isinstance(queries, list):
+                            queries = [queries] if queries is not None else []
+                        search_results = google_search.search(queries=queries)
+                        tool_outputs.append({
+                            "tool_call_id": tool_call.id,
+                            "output": {"search_results": [sr.dict() for sr in search_results]}
+                        })
+                    elif function_name == "browsing":
+                        browsing_result = await browsing.browse(query=function_args.get('query'),
+                                                                url=function_args.get('url'))
+                        tool_outputs.append({
+                            "tool_call_id": tool_call.id,
+                            "output": {"browsing_result": browsing_result}
+                        })
                     else:
-                        claude_messages.append({"role": m["role"], "content": m["content"]})
+                        tool_outputs.append({
+                            "tool_call_id": tool_call.id,
+                            "output": {"error": f"Unknown tool: {function_name}"}
+                        })
 
-                response = await self.anthropic_client.messages.create(
-                    model=model_args.get("model", "claude-3-opus-20240229"),
-                    max_tokens=model_args.get("max_tokens", 1000),
-                    messages=claude_messages
+                # Add assistant's tool calls and tool outputs to messages
+                messages.append(response_message)
+                for output in tool_outputs:
+                    messages.append({
+                        "tool_call_id": output["tool_call_id"],
+                        "role": "tool",
+                        "name": tool_call.function.name,  # Assuming name is the same as function_name
+                        "content": json.dumps(output["output"])
+                    })
+
+                # Send back to the model with tool outputs
+                second_response = await client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
                 )
-                return response.content[0].text
-            except Exception as e:
-                raise Exception(f"Anthropic Claude API error: {e}")
-        else:
-            raise ValueError("Unsupported AI provider")
+                return second_response.choices[0].message.content
+            else:
+                return response_message.content
+        except openai.APIStatusError as e:
+            raise Exception(f"OpenAI API error: {e.status_code} - {e.response}")
+        except openai.APIConnectionError as e:
+            raise Exception(f"OpenAI API connection error: {e}")
+        except Exception as e:
+            raise Exception(f"An unexpected error occurred with OpenAI: {e}")
 
-    async def _call_gemini_vision(self, prompt: str, base64_pdf: str, api_key: str) -> str:
-        """Helper to call Gemini Vision for PDF processing."""
-        genai.configure(api_key=api_key)
-        # Gemini Vision expects PDF as inline data with specific mime type
-        pdf_part = {
-            "mime_type": "application/pdf",
-            "data": base64_pdf
-        }
+    async def _call_anthropic(self, model_name: str, prompt: str, api_key: str,
+                              chat_history: Optional[List[Dict]] = None, tools: Optional[List[Dict]] = None,
+                              system_instruction: Optional[str] = None) -> str:
+        client = self._get_anthropic_client(api_key)
+
+        messages = []
+        if chat_history:
+            # Anthropic expects history as alternating user/assistant roles
+            for msg in chat_history:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": prompt})
 
         try:
-            model = genai.GenerativeModel(model_name="gemini-2.0-flash")
-            response = await model.generate_content_async([prompt, pdf_part])
-            return response.text
+            response = await client.messages.create(
+                model=model_name,
+                max_tokens=2000,
+                messages=messages,
+                tools=tools if tools else None,
+                system=system_instruction,  # Anthropic system instruction
+            )
+
+            if response.tool_use:  # Anthropic's way of indicating tool calls
+                tool_outputs = []
+                for tool_use in response.tool_use:
+                    tool_name = tool_use.name
+                    tool_input = tool_use.input
+                    print(f"Anthropic calling tool: {tool_name} with input: {tool_input}")
+
+                    # Dynamically call the tool function
+                    if tool_name == "google_search":
+                        # Ensure 'queries' is a list as expected by google_search.search
+                        queries = tool_input.get('queries')
+                        if not isinstance(queries, list):
+                            queries = [queries] if queries is not None else []
+                        search_results = google_search.search(queries=queries)
+                        tool_outputs.append({
+                            "tool_use_id": tool_use.id,
+                            "content": {"search_results": [sr.dict() for sr in search_results]}
+                        })
+                    elif tool_name == "browsing":
+                        browsing_result = await browsing.browse(query=tool_input.get('query'),
+                                                                url=tool_input.get('url'))
+                        tool_outputs.append({
+                            "tool_use_id": tool_use.id,
+                            "content": {"browsing_result": browsing_result}
+                        })
+                    else:
+                        tool_outputs.append({
+                            "tool_use_id": tool_use.id,
+                            "content": {"error": f"Unknown tool: {tool_name}"}
+                        })
+
+                # Send tool outputs back to the model
+                messages.append(response.content)  # Add the tool_use content from assistant
+                messages.append({"role": "user", "content": tool_outputs})  # Send tool results as user message
+
+                second_response = await client.messages.create(
+                    model=model_name,
+                    max_tokens=2000,
+                    messages=messages,
+                )
+                return second_response.content[0].text
+            else:
+                return response.content[0].text
+        except anthropic.APIStatusError as e:
+            raise Exception(f"Anthropic API error: {e.status_code} - {e.response.text}")
+        except anthropic.APIConnectionError as e:
+            raise Exception(f"Anthropic API connection error: {e}")
         except Exception as e:
-            raise Exception(f"Gemini Vision API error: {e}")
+            raise Exception(f"An unexpected error occurred with Anthropic: {e}")
 
-    async def estimate_job_chance(self, job_description: str, profile: UserProfile, ai_provider: AIProvider,
-                                  api_key: str) -> str:
-        """Estimate job chance based on profile and job description"""
-        profile_text = self._format_profile_for_ai(profile)
+    async def _call_ai_model(self, ai_provider: str, model_name: str, prompt: str, api_key: str,
+                             chat_history: Optional[List[Dict]] = None, tools: Optional[List[Dict]] = None,
+                             system_instruction: Optional[str] = None) -> str:
+        if ai_provider == "gemini":
+            return await self._call_gemini_pro(prompt, api_key, tools=tools, system_instruction=system_instruction,
+                                               chat_history=chat_history)
+        elif ai_provider == "openai":
+            return await self._call_openai(model_name, prompt, api_key, chat_history=chat_history, tools=tools,
+                                           system_instruction=system_instruction)
+        elif ai_provider == "anthropic":
+            return await self._call_anthropic(model_name, prompt, api_key, chat_history=chat_history, tools=tools,
+                                              system_instruction=system_instruction)
+        else:
+            raise ValueError("Unsupported AI provider.")
+
+    # Modified to accept Dict[str, Any] for user_profile
+    async def estimate_job_chance(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str, api_key: str) -> str:
+        # profile_data = json.loads(user_profile) # REMOVED: main.py now sends dict directly
+        formatted_profile = self._format_profile_for_prompt(user_profile) # Use user_profile directly
 
         prompt = f"""
-        Analyze the following candidate profile against the provided job description.
-        Candidate Profile:
-        {profile_text}
+        You are an AI assistant specialized in career counseling.
+        Analyze the following job description and the provided user profile to estimate the job chance.
+        Provide a percentage score (e.g., 75%) and a detailed explanation of strengths, weaknesses, and actionable advice.
 
         Job Description:
         {job_description}
 
-        Provide a detailed assessment of the candidate's job application chances, including:
-        1. Overall likelihood (e.g., Low, Medium, High, Excellent)
-        2. Strengths of the candidate's profile for this job
-        3. Weaknesses or gaps in the candidate's profile
-        4. Specific recommendations to improve chances
-        5. Key skills or experiences to highlight in the application
+        User Profile:
+        {formatted_profile}
 
-        Format your response clearly with sections for each point.
+        Provide your response in a clear, concise, and professional manner, using markdown for readability.
         """
+        model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-3.5-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"  # Default models
 
-        return await self._call_ai_provider(prompt, ai_provider, api_key)
+        return await self._call_ai_model(ai_provider, model_name, prompt, api_key)
 
-    async def tune_cv(self, job_description: str, profile: UserProfile, ai_provider: AIProvider, api_key: str) -> str:
-        """Generate a tuned CV based on job description"""
-        profile_text = self._format_profile_for_ai(profile)
+    # Modified to accept Dict[str, Any] for user_profile
+    async def tune_cv_for_job(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str, api_key: str) -> str:
+        # profile_data = json.loads(user_profile) # REMOVED
+        formatted_profile = self._format_profile_for_prompt(user_profile)
 
         prompt = f"""
-        Based on the following candidate profile and job description, please provide suggestions on how to tailor the CV to better match the specific job.
-
-        Candidate Profile:
-        {profile_text}
+        You are an AI assistant specialized in CV optimization.
+        Given the following job description and user profile, suggest specific improvements to the user's CV.
+        Focus on tailoring keywords, rephrasing bullet points, and highlighting relevant experiences/skills.
+        Provide actionable advice in markdown format.
 
         Job Description:
         {job_description}
 
-        Please provide:
-        1. A rewritten professional summary that aligns with the job
-        2. Prioritized and reworded experience descriptions that highlight relevant achievements
-        3. A skills section ordered by relevance to the job
-        4. Suggestions for additional sections (if any) that would strengthen the application
-        5. Keywords from the job description that should be incorporated
+        User Profile:
+        {formatted_profile}
 
-        Make the suggestions compelling and specifically targeted to this role while maintaining honesty about the candidate's experience.
+        Provide your response in a clear, concise, and professional manner, using markdown for readability.
         """
+        model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-3.5-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"  # Default models
+        return await self._call_ai_model(ai_provider, model_name, prompt, api_key)
 
-        return await self._call_ai_provider(prompt, ai_provider, api_key)
-
-    async def generate_cover_letter(self, job_description: str, profile: UserProfile, ai_provider: AIProvider,
+    # Modified to accept Dict[str, Any] for user_profile
+    async def generate_cover_letter(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str,
                                     api_key: str) -> str:
-        """Generate a cover letter for a job opening."""
-        profile_text = self._format_profile_for_ai(profile)
+        # profile_data = json.loads(user_profile) # REMOVED
+        formatted_profile = self._format_profile_for_prompt(user_profile)
 
         prompt = f"""
-        Write a professional and compelling cover letter for the following job opening, tailored to the candidate's profile.
-
-        Candidate Profile:
-        {profile_text}
+        You are an AI assistant that writes professional cover letters.
+        Generate a compelling cover letter based on the following job description and user's profile.
+        The cover letter should be professional, concise, and highlight relevant skills and experiences.
+        Address it to "Hiring Manager".
 
         Job Description:
         {job_description}
 
-        The cover letter should:
-        - Be addressed to a generic hiring manager (e.g., "Hiring Manager" or "Hiring Team").
-        - Clearly state the position being applied for.
-        - Highlight relevant skills and experiences from the candidate's profile that directly match the job description.
-        - Demonstrate enthusiasm for the company and the role.
-        - Be concise and persuasive.
-        - Conclude with a strong call to action.
+        User Profile:
+        {formatted_profile}
+
+        Provide the full cover letter in markdown format.
         """
-        return await self._call_ai_provider(prompt, ai_provider, api_key)
+        model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-3.5-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"  # Default models
+        return await self._call_ai_model(ai_provider, model_name, prompt, api_key)
 
-    async def interview_qa_chat(self, job_title: str, profile: UserProfile, chat_history: List[Dict[str, str]],
-                                ai_provider: AIProvider, api_key: str) -> str:
-        """Engage in an interview Q&A practice chat."""
-        profile_text = self._format_profile_for_ai(profile)
+    # Modified to accept List[Dict] for chat_history, and Dict[str, Any] for user_profile
+    async def interview_qa(self, job_title: str, user_profile: Dict[str, Any], chat_history: List[Dict], ai_provider: str,
+                           api_key: str) -> str:
+        # profile_data = json.loads(user_profile) # REMOVED
+        formatted_profile = self._format_profile_for_prompt(user_profile)
+        # history = json.loads(chat_history)  # REMOVED: chat_history is already a list of dicts
 
-        system_message = f"""
-        You are an interview practice chatbot. Your goal is to help the user practice for an interview for a '{job_title}' role.
-        You have access to the user's profile:
-        {profile_text}
+        # Constructing the full prompt for the AI based on history and new user input
+        # The last message in history is the current user's message
+        current_user_message = chat_history[-1]['content'] if chat_history else ""
 
-        Based on the job title and the user's profile, ask relevant interview questions one by one.
-        After the user provides an answer, give constructive feedback on their answer, suggest improvements, and then ask the next question.
-        Start by asking a common opening question like "Tell me about yourself."
-        Keep your responses concise and focused on one question or feedback at a time.
+        # Remove the last user message from history for passing to AI models
+        # as it's passed as the 'prompt' argument.
+        cleaned_history = chat_history[:-1] if chat_history else []
+
+        system_instruction = f"""
+        You are an AI interview coach. Your goal is to help the user practice for an interview for a '{job_title}' role.
+        You have access to their profile:
+        {formatted_profile}
+
+        When the user asks a question, provide a realistic interview question.
+        When the user provides an answer, evaluate it based on their profile and the job title, offering constructive feedback.
+        Keep your responses concise and to the point.
         """
 
-        # Construct messages for the AI.
-        # For Gemini, we need to avoid the 'system' role directly in the messages list.
-        # Instead, we'll prepend system instructions to the first user message.
+        model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-3.5-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"  # Default models
 
-        messages_for_ai = []
-        if not chat_history:
-            # First turn: prepend system message to the initial user prompt
-            initial_user_prompt = f"{system_message}\n\nThe user wants to practice for a '{job_title}' role. Start the interview."
-            messages_for_ai.append({"role": "user", "content": initial_user_prompt})
-        else:
-            # Subsequent turns: add system message as context to the first message if not already done,
-            # or just append the existing chat history.
-            # Assuming the system message was already handled in the first turn,
-            # we just append the existing chat history.
-            messages_for_ai.extend(chat_history)
+        return await self._call_ai_model(ai_provider, model_name, current_user_message, api_key,
+                                         chat_history=cleaned_history, system_instruction=system_instruction)
 
-        # The prompt for _call_ai_provider will be the last user message from the frontend.
-        # _call_ai_provider will append this to `messages_for_ai`.
-        # So, we pass the existing chat history (or the initial system-infused prompt)
-        # and the last user message from the frontend as the `prompt` argument.
-
-        # The `_call_ai_provider` function expects the *current* user prompt as `prompt`
-        # and the *previous* chat history as `messages`.
-        # So, we take the last user message from `chat_history` as the `prompt`
-        # and the rest of the `chat_history` (excluding the last one) as `messages`.
-
-        current_user_message = chat_history[-1]["content"] if chat_history else ""
-        history_for_ai = chat_history[:-1] if chat_history else []
-
-        # If it's the very first message from the user (job title),
-        # the system message needs to be part of that first user message.
-        if not history_for_ai and ai_provider == AIProvider.GEMINI:
-            # This is the first interaction with Gemini, so embed system message
-            initial_gemini_prompt = f"{system_message}\n\n{current_user_message}"
-            return await self._call_ai_provider(initial_gemini_prompt, ai_provider, api_key, messages=[])
-        else:
-            # For subsequent messages or other providers, use standard roles
-            return await self._call_ai_provider(current_user_message, ai_provider, api_key, messages=history_for_ai)
-
-    async def extract_job_skills(self, job_description: str, profile: UserProfile, ai_provider: AIProvider,
-                                 api_key: str) -> str:
-        """Extract key skills from a job description and compare with user's profile."""
-        profile_skills = ", ".join([skill.name for skill in profile.skills]) if profile.skills else "No skills listed."
+    # Modified to accept Dict[str, Any] for user_profile
+    async def extract_job_skills(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str, api_key: str) -> str:
+        # profile_data = json.loads(user_profile) # REMOVED
+        formatted_profile = self._format_profile_for_prompt(user_profile)
 
         prompt = f"""
-        Analyze the following job description and candidate's existing skills.
+        You are an AI assistant specialized in skill extraction and analysis.
+        Given the following job description, extract a comprehensive list of key skills required for the role.
+        Then, compare these required skills with the user's provided profile and highlight any gaps or strong matches.
+        Categorize skills (e.g., Technical, Soft, Domain-specific).
+        Provide your response in markdown format.
 
         Job Description:
         {job_description}
 
-        Candidate's Current Skills:
-        {profile_skills}
+        User Profile:
+        {formatted_profile}
 
-        Please provide:
-        1. A list of all key skills, technologies, and qualifications explicitly mentioned or strongly implied in the job description.
-        2. For each key skill, indicate if the candidate possesses it based on their current skills.
-        3. Highlight any significant skill gaps between the job requirements and the candidate's profile.
-        4. Suggest how the candidate can phrase their existing skills to better match the job description's language.
+        Provide your response in a clear, concise, and professional manner, using markdown for readability.
         """
-        return await self._call_ai_provider(prompt, ai_provider, api_key)
+        model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-3.5-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"  # Default models
+        return await self._call_ai_model(ai_provider, model_name, prompt, api_key)
 
-    async def craft_interview_questions(self, candidate_info: str, ai_provider: AIProvider, api_key: str) -> str:
-        """Craft insightful interview questions for a candidate based on provided information."""
+    async def craft_interview_questions(self, candidate_info: str, ai_provider: str, api_key: str) -> str:
         prompt = f"""
-        You are an experienced interviewer. Based on the following information about a candidate (which could be a job description they applied for, or a summary of their resume), generate a list of insightful interview questions.
+        You are an AI assistant that helps recruiters and hiring managers.
+        Based on the following candidate information (e.g., resume summary, specific experiences, or job title),
+        craft a list of insightful and relevant interview questions.
+        Include a mix of behavioral, technical, and situational questions.
 
         Candidate Information:
         {candidate_info}
 
-        The questions should:
-        - Be relevant to the information provided.
-        - Aim to assess skills, experience, problem-solving abilities, and cultural fit.
-        - Include a mix of behavioral, technical (if applicable), and situational questions.
-        - Avoid generic questions if more specific ones can be formulated.
-        - Aim for 5-10 distinct questions.
+        Provide the questions in a clear, numbered list using markdown.
         """
-        return await self._call_ai_provider(prompt, ai_provider, api_key)
+        model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-3.5-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"  # Default models
+        return await self._call_ai_model(ai_provider, model_name, prompt, api_key)
 
-    async def research_company_website(self, company_url: str, ai_provider: AIProvider, api_key: str) -> str:
-        """Extract key information from a company's website using browsing tool."""
-        try:
-            # Use the browsing tool to fetch the content of the URL
-            company_website_content = await browsing.browse(query=f"content of {company_url}", url=company_url)
-
-            if not company_website_content:
-                return "Could not retrieve content from the company website. It might be inaccessible or empty."
-
-            prompt = f"""
-            Analyze the following content extracted from a company's website.
-            Extract the following key information:
-            1.  **Mission Statement:** The company's core purpose or mission.
-            2.  **Values:** The core principles or beliefs that guide the company.
-            3.  **Work Areas/Products/Services:** What the company primarily does, its main offerings, or key departments.
-            4.  **Recent Projects/Achievements (if discernible):** Any notable recent projects, successes, or milestones.
-            5.  **Recent News/Updates (if discernible):** Any significant news, press releases, or announcements.
-
-            Company Website Content (from {company_url}):
-            {company_website_content[:8000]}  # Limit content to avoid token limits, adjust as needed
-
-            Please present the information clearly, with headings for each section. If a section is not found, state "Not found" or "N/A".
-            """
-            return await self._call_ai_provider(prompt, ai_provider, api_key)
-        except Exception as e:
-            raise Exception(f"Error browsing company website or processing content: {e}")
-
-    async def generate_about_me_answer(self, job_description: str, profile: UserProfile, ai_provider: AIProvider,
-                                       api_key: str) -> str:
-        """Generate a tuned 'Tell me about yourself' answer based on job description and profile."""
-        profile_text = self._format_profile_for_ai(profile)
+    async def research_company_website(self, company_url: str, ai_provider: str, api_key: str) -> str:
+        # Define the tools available to the model
+        tools = [
+            {
+                "function_declarations": [
+                    {
+                        "name": "browsing",
+                        "description": "Browse a given URL and return its text content.",
+                        "parameters": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "query": {"type": "STRING",
+                                          "description": "A search query related to the content you want to find on the page."},
+                                "url": {"type": "STRING", "description": "The URL to browse."}
+                            },
+                            "required": ["url"]
+                        }
+                    }
+                ]
+            }
+        ]
 
         prompt = f"""
-        Craft a compelling and concise answer to the common interview question "Tell me about yourself" for a candidate applying to the following job.
-        The answer should be tuned to the job description and leverage the candidate's profile.
+        You are an AI assistant specialized in company research.
+        Your task is to extract key information from the provided company website URL.
+        Focus on identifying the company's mission, values, main products/services, recent news or achievements, and general culture.
+        Use the 'browsing' tool to fetch the content of the URL.
 
-        Candidate Profile:
-        {profile_text}
+        Company Website URL: {company_url}
+
+        After browsing, summarize the key findings in a structured markdown format.
+        If you cannot access the URL or find relevant information, state that clearly.
+        """
+        model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-4-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"  # Models capable of tool use
+
+        # Call the AI model with the browsing tool
+        return await self._call_ai_model(ai_provider, model_name, prompt, api_key, tools=tools)
+
+    # Modified to accept Dict[str, Any] for user_profile
+    async def generate_about_me_answer(self, job_description: str, user_profile: Dict[str, Any], ai_provider: str,
+                                       api_key: str) -> str:
+        # profile_data = json.loads(user_profile) # REMOVED
+        formatted_profile = self._format_profile_for_prompt(user_profile)
+
+        prompt = f"""
+        You are an AI interview coach. Your task is to help the user craft a compelling "Tell me about yourself" (About Me) answer.
+        The answer should be tailored to the provided job description and highlight relevant aspects of the user's profile.
+        Structure the answer using the "Past-Present-Future" framework (or similar, e.g., "Skills-Experience-Goals").
 
         Job Description:
         {job_description}
 
-        Your answer should:
-        - Be structured as a brief narrative (e.g., present-past-future or past-present-future).
-        - Highlight 2-3 key experiences, skills, or achievements most relevant to the job.
-        - Connect the candidate's background directly to the requirements and goals of the target role.
-        - Express enthusiasm for the position and the company.
-        - Be professional and engaging.
-        - Aim for a length that can be delivered in 1-2 minutes (approx. 150-250 words).
+        User Profile:
+        {formatted_profile}
+
+        Provide the "About Me" answer in markdown format.
         """
-        return await self._call_ai_provider(prompt, ai_provider, api_key)
+        model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-3.5-turbo" if ai_provider == "openai" else "claude-3-opus-20240229"  # Default models
+        return self._call_ai_model(ai_provider, model_name, prompt, api_key)
 
-    async def extract_profile_from_resume_pdf(self, pdf_content: bytes, ai_provider: AIProvider, api_key: str) -> dict:
-        """
-        Extracts user profile information from a PDF resume using AI.
-        Returns a dictionary with profile data.
-        """
-        # Encode PDF content to base64
-        base64_pdf = base64.b64encode(pdf_content).decode('utf-8')
+    async def fill_profile_from_resume(self, resume_content: bytes, ai_provider: str, api_key: str) -> Dict[str, Any]:
+        print(f"fill_profile_from_resume called. AI Provider: {ai_provider}")
 
-        # The prompt for Gemini Vision, asking for structured JSON output
-        prompt = """
-        You are an expert resume parser. Extract the following information from the provided resume PDF and return it as a JSON object.
-        Strictly adhere to the JSON schema provided below. If a field is not found, omit it or set it to an empty string/array, but do NOT
-        generate placeholder values.
-
-        JSON Schema:
-        ```json
-        {
-            "full_name": "string",
-            "email": "string",
-            "phone": "string",
-            "location": "string",
-            "summary": "string",
-            "education": [
-                {
-                    "degree": "string",
-                    "institution": "string",
-                    "graduation_year": "integer",
-                    "gpa": "float"
-                }
-            ],
-            "experience": [
-                {
-                    "position": "string",
-                    "company": "string",
-                    "start_date": "string (YYYY-MM or YYYY-MM-DD)",
-                    "end_date": "string (YYYY-MM or YYYY-MM-DD or 'Present')",
-                    "description": "string"
-                }
-            ],
-            "skills": [
-                {
-                    "name": "string",
-                    "level": "string (Beginner, Intermediate, Advanced, Expert)"
-                }
-            ],
-            "languages": ["string"],
-            "certifications": ["string"],
-            "linkedin_url": "string",
-            "github_url": "string",
-            "portfolio_url": "string"
-        }
-        ```
-
-        Important notes for extraction:
-        - For dates, use 'YYYY-MM' or 'YYYY-MM-DD' format. If 'Present' is indicated, use 'Present'.
-        - Experience description should be a single string summarizing key duties and achievements. Do not break it into a list of responsibilities.
-        - Skill level should be inferred if possible, otherwise use a default like 'Advanced' for common professional skills or 'Beginner' if very basic.
-        - For phone, extract a clean number, e.g., "+15551234567".
-        - Ensure all extracted strings are clean and well-formatted.
-        - If multiple URLs of the same type (e.g., two LinkedIn profiles), pick the most prominent one.
-        - GPA should be a float if available, otherwise omit.
-        - Combine all relevant details for "summary" from the resume.
-
-        Extract the profile from the following resume and return ONLY valid JSON:
-        """
-
+        resume_text = ""
         try:
-            if ai_provider == AIProvider.GEMINI:
-                response_text = await self._call_gemini_vision(prompt, base64_pdf, api_key)
-            else:
-                raise ValueError(
-                    "Only Gemini is currently supported for 'Fill Profile from Resume' due to its PDF processing capabilities.")
+            # Attempt to decode bytes to string. This will work if resume_content is plain text.
+            resume_text = resume_content.decode('utf-8')
+            print("Successfully decoded resume content to UTF-8 text.")
+        except UnicodeDecodeError:
+            # If it's a binary PDF, direct decode will fail.
+            # Here you would integrate a PDF text extraction library.
+            # For now, we'll indicate that it's binary data to the LLM.
+            print("Could not decode resume content as UTF-8. Assuming binary PDF content.")
+            # If using models that accept image/PDF data directly (like some Gemini Vision models),
+            # you'd pass the raw bytes here. For text-only models, you MUST extract text first.
+            # Let's assume for this prompt, the LLM is smart enough to handle the binary data hint,
+            # or that the user will provide text/a simple PDF.
+            resume_text = "The provided resume content is a binary file (e.g., PDF). Please extract information from it. If direct text extraction is not possible for you, state that."
 
-            extracted_data = parse_response_to_json(response_text)
 
-            # Ensure lists are lists of dicts/strings as expected by Pydantic models
-            # and handle potential single string descriptions for experience
-            if 'experience' in extracted_data:
-                for exp in extracted_data['experience']:
-                    if isinstance(exp.get('description'), list):
-                        exp['description'] = " ".join(exp['description'])
-                    exp['description'] = exp.get('description', '')  # Ensure it's a string, even if empty
+        print(f"Resume text for AI processing (first 200 chars): {resume_text[:200]}...")
 
-            # Ensure skills have a level, default to 'Advanced' if missing
-            if 'skills' in extracted_data:
-                for skill in extracted_data['skills']:
-                    if 'level' not in skill or not skill.get('level'):
-                        skill['level'] = 'Advanced'
+        prompt = f"""
+        You are an AI assistant specialized in parsing resumes.
+        Extract the following information from the provided resume text and return it as a JSON object.
+        Ensure the JSON structure matches the UserProfile model fields:
+        full_name, email, phone, location, summary, education (list of objects with degree, institution, graduation_year, gpa), experience (list of objects with position, company, start_date, end_date, description), skills (list of objects with name, level), languages (list of strings), certifications (list of strings), linkedin_url, github_url, portfolio_url, cv_profile_file (should be null).
 
-            # Filter out any empty/invalid entries that might have been parsed
-            extracted_data['education'] = [
-                edu for edu in extracted_data.get('education', [])
-                if isinstance(edu, dict) and edu.get('degree') and edu.get('institution')
-            ]
-            extracted_data['experience'] = [
-                exp for exp in extracted_data.get('experience', [])
-                if isinstance(exp, dict) and exp.get('position') and exp.get('company')
-            ]
-            extracted_data['skills'] = [
-                skill for skill in extracted_data.get('skills', [])
-                if isinstance(skill, dict) and skill.get('name')
-            ]
-            extracted_data['languages'] = [lang for lang in extracted_data.get('languages', []) if lang]
-            extracted_data['certifications'] = [cert for cert in extracted_data.get('certifications', []) if cert]
+        If a field is not found or applicable, set it to null or an empty array as appropriate.
+        For dates (start_date, end_date in experience), use YYYY-MM format if possible.
+        For skills, infer level if not explicitly stated (Beginner, Intermediate, Advanced, Expert).
 
-            return extracted_data
+        Resume Content:
+        {resume_text}
 
-        except Exception as e:
-            raise Exception(f"Error processing AI resume extraction: {e}")
+        Return ONLY the JSON object. Do not include any other text or markdown formatting outside the JSON.
+        """
+        model_name = "gemini-2.0-flash" if ai_provider == "gemini" else "gpt-4-turbo-preview" if ai_provider == "openai" else "claude-3-opus-20240229"  # Models best for structured output
+
+        # Call AI model to get JSON response
+        ai_response_text = self._call_ai_model(ai_provider, model_name, prompt, api_key)
+
+        print(f"Raw AI response for profile fill: {ai_response_text}")
+
+        # Parse the JSON response
+        try:
+            parsed_profile = parse_response_to_json(ai_response_text)
+            print(f"Parsed profile data from AI: {parsed_profile}")
+            return parsed_profile
+        except ValueError as e:
+            raise Exception(
+                f"Failed to parse AI response into JSON for profile: {e}. Raw AI response: {ai_response_text}")
+
+    def _format_profile_for_prompt(self, profile_data: Dict[str, Any]) -> str:
+        """Formats the user profile dictionary into a readable string for AI prompts."""
+        formatted_str = "--- User Profile ---\n"
+        for key, value in profile_data.items():
+            if value:  # Only include non-empty fields
+                if isinstance(value, list) and key in ['education', 'experience', 'skills', 'languages',
+                                                       'certifications']:
+                    if key == 'education':
+                        formatted_str += "Education:\n"
+                        for item in value:
+                            formatted_str += f"  - Degree: {item.get('degree', '')}, Institution: {item.get('institution', '')}, Year: {item.get('graduation_year', '')}, GPA: {item.get('gpa', '')}\n"
+                    elif key == 'experience':
+                        formatted_str += "Experience:\n"
+                        for item in value:
+                            formatted_str += f"  - Position: {item.get('position', '')}, Company: {item.get('company', '')}, Dates: {item.get('start_date', '')} - {item.get('end_date', '')}, Description: {item.get('description', '')}\n"
+                    elif key == 'skills':
+                        formatted_str += "Skills:\n"
+                        for item in value:
+                            formatted_str += f"  - {item.get('name', '')} ({item.get('level', '')})\n"
+                    elif key == 'languages':
+                        formatted_str += f"Languages: {', '.join(value)}\n"
+                    elif key == 'certifications':
+                        formatted_str += f"Certifications: {', '.join(value)}\n"
+                elif isinstance(value, (str, int, float)):
+                    formatted_str += f"{key.replace('_', ' ').title()}: {value}\n"
+        formatted_str += "--------------------"
+        return formatted_str

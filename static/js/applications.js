@@ -115,7 +115,12 @@ function renderApplications(appsToRender = applications) {
         button.onclick = (event) => showApplicationDetailModal(event.target.dataset.id);
     });
     document.querySelectorAll('.edit-btn').forEach(button => {
-        button.onclick = (event) => editApplication(event.target.dataset.id);
+        // Ensure that editApplication is called with the correct ID
+        button.onclick = (event) => {
+            const appId = event.target.dataset.id;
+            console.log("edit-btn clicked. Extracted ID:", appId); // Debug log
+            editApplication(appId);
+        };
     });
     document.querySelectorAll('.delete-btn').forEach(button => {
         button.onclick = (event) => deleteApplication(event.target.dataset.id);
@@ -217,12 +222,16 @@ async function showAddApplicationForm(appId = null) {
     formSection.style.display = 'block';
     document.getElementById('add-app-btn').style.display = 'none';
 
-    if (appId) {
+    // Ensure appId is a string and not an object
+    const validatedAppId = typeof appId === 'string' ? appId : null;
+
+    if (validatedAppId) {
         formTitle.textContent = 'Edit Application';
         saveButton.textContent = 'Update Application';
-        appIdInput.value = appId;
+        appIdInput.value = validatedAppId;
+        console.log("showAddApplicationForm: Editing app, setting application-id to:", appIdInput.value); // Debug log
 
-        const app = applications.find(a => a.id === appId);
+        const app = applications.find(a => String(a.id) === String(validatedAppId)); // Ensure string comparison
         if (app) {
             document.getElementById('job-title').value = app.job_title || '';
             document.getElementById('company').value = app.company || '';
@@ -233,19 +242,26 @@ async function showAddApplicationForm(appId = null) {
             document.getElementById('cover-letter').value = app.cover_letter_notes || '';
 
             // Display current CV file name if available
-            if (app.cv_file_name) {
-                cvFileNameDisplay.textContent = `Current CV: ${app.cv_file_name}`;
+            if (app.cv_file) { // Check for cv_file path existence
+                const fileName = app.cv_file.split('/').pop(); // Extract filename from path
+                cvFileNameDisplay.textContent = `Current CV: ${fileName}`;
                 cvFileNameDisplay.style.display = 'inline';
             } else {
                 cvFileNameDisplay.textContent = '';
                 cvFileNameDisplay.style.display = 'none';
             }
             cvFileInput.value = ''; // Clear file input for new upload
+        } else {
+            console.error("Application not found for editing with ID:", validatedAppId);
+            window.showAlert("Application not found for editing.", "error");
+            // Optionally, reset form and hide if app not found
+            hideAddApplicationForm();
         }
     } else {
         formTitle.textContent = 'Add New Application';
         saveButton.textContent = 'Save Application';
         appIdInput.value = ''; // Clear ID for new application
+        console.log("showAddApplicationForm: Adding new app, clearing application-id to:", appIdInput.value); // Debug log
         document.getElementById('application-form').reset(); // Clear form fields
         cvFileNameDisplay.textContent = '';
         cvFileNameDisplay.style.display = 'none';
@@ -265,8 +281,14 @@ function hideAddApplicationForm() {
         addAppBtn.style.display = 'block';
     }
     document.getElementById('application-form').reset(); // Reset form fields
-    document.getElementById('application-id').value = ''; // Clear hidden ID
+    const appIdInput = document.getElementById('application-id');
+    if (appIdInput) {
+        appIdInput.value = ''; // Explicitly clear hidden ID
+        console.log("hideAddApplicationForm: Clearing application-id to:", appIdInput.value); // Debug log
+    }
     document.getElementById('cv-file-name-display').style.display = 'none'; // Hide CV file name display
+    // Also hide any previous error/loading messages
+    hideLoadingHideResult('app-form-loading', 'application-form-messages');
 }
 
 /**
@@ -290,53 +312,94 @@ function handleCvFileUpload(event) {
  * @param {Event} event The form submission event.
  */
 async function addApplication(event) {
-    event.preventDefault();
+    console.log('1. addApplication function called!');
+    event.preventDefault(); // Prevent default form submission
 
-    const appId = document.getElementById('application-id').value;
-    const jobTitle = document.getElementById('job-title').value;
-    const company = document.getElementById('company').value;
-    const link = document.getElementById('link').value;
-    const applicationDate = document.getElementById('application-date').value;
-    const status = document.getElementById('status').value;
-    const description = document.getElementById('description').value;
-    const cvFile = document.getElementById('cv-file').files[0];
-    const coverLetterNotes = document.getElementById('cover-letter').value;
+    const form = event.target;
+    console.log('2. Form element captured:', form);
+    const formData = new FormData(form);
+    console.log('3. FormData created:', formData);
 
-    const formData = new FormData();
-    formData.append('job_title', jobTitle);
-    formData.append('company', company);
-    formData.append('link', link);
-    formData.append('application_date', applicationDate);
-    formData.append('status', status);
-    formData.append('description', description);
-    formData.append('cover_letter_notes', coverLetterNotes);
+    // CRITICAL FIX: Get appId directly from the element's value, not from the event object.
+    const appIdElement = document.getElementById('application-id');
+    const appId = appIdElement ? appIdElement.value : ''; // Safely get the value
+    console.log('4. Application ID value:', appId); // This should now be a string or empty string
 
-    if (cvFile) {
-        formData.append('cv_file', cvFile);
+    // Validate required fields using formData.get()
+    const jobTitle = formData.get('job_title');
+    const company = formData.get('company');
+    const applicationDate = formData.get('application_date');
+
+    if (!jobTitle || !company || !applicationDate) {
+        console.log('5. Validation failed: Missing required fields.');
+        window.showAlert('Please fill in all required fields (Job Title, Company, Application Date).', 'error');
+        // Ensure loading/messages are hidden if validation fails
+        hideLoadingHideResult('app-form-loading', 'application-form-messages');
+        return;
     }
+    console.log('5. Validation passed.');
 
-    const method = appId ? 'PUT' : 'POST';
-    const url = appId ? `/api/applications/${appId}` : '/api/applications';
+    showLoading('app-form-loading', 'application-form-messages');
+    console.log('6. Loading indicator shown.');
+
+    let endpoint = '/api/applications';
+    let method = 'POST';
+    if (appId) {
+        endpoint = `/api/applications/${appId}`;
+        method = 'PUT';
+    }
+    console.log(`7. Preparing fetch request: Method=${method}, Endpoint=${endpoint}`);
 
     try {
-        const response = await fetch(url, {
+        console.log('8. Attempting to send fetch request...');
+        const response = await fetch(endpoint, {
             method: method,
             body: formData // FormData automatically sets Content-Type to multipart/form-data
         });
+        console.log('9. Fetch request completed, response received.');
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to save application.');
+            const errorData = await response.json(); // Attempt to parse JSON error
+            console.error("10. Server responded with an error:", errorData); // Log full error from backend
+            // Try to get a more specific error message from the backend response
+            let errorMessage = 'Failed to save application.';
+            if (errorData && typeof errorData === 'object') {
+                if (errorData.detail) {
+                    // FastAPI validation errors often have 'detail' as an array of objects
+                    if (Array.isArray(errorData.detail) && errorData.detail.length > 0 && errorData.detail[0].msg) {
+                        errorMessage = errorData.detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join('; ');
+                    } else if (typeof errorData.detail === 'string') {
+                        errorMessage = errorData.detail;
+                    }
+                } else if (errorData.message) { // Some APIs might use 'message'
+                    errorMessage = errorData.message;
+                } else {
+                    errorMessage = JSON.stringify(errorData); // Fallback to stringifying the whole object
+                }
+            }
+            throw new Error(errorMessage);
         }
 
         const result = await response.json();
+        console.log('11. Application saved successfully:', result);
         window.showAlert(`Application ${appId ? 'updated' : 'added'} successfully!`, 'success');
-        hideAddApplicationForm();
+        hideLoadingHideResult('app-form-loading', 'application-form-messages');
+        document.getElementById('add-application-form').style.display = 'none';
+        document.getElementById('add-app-btn').style.display = 'block';
         loadApplications(); // Reload and re-render applications
         window.loadDashboardData(); // Reload dashboard data
+
+        // Reset the form after successful submission
+        form.reset();
+        document.getElementById('cv-file-name-display').textContent = ''; // Clear file name display
+        document.getElementById('cv-file-name-display').style.display = 'none';
+        document.getElementById('application-id').value = ''; // Clear hidden ID for next add
     } catch (error) {
-        console.error('Error saving application:', error);
-        window.showAlert('Error saving application: ' + error.message, 'error');
+        console.error('12. Error saving application (frontend catch):', error);
+        // Ensure error.message is always a string for display
+        const displayMessage = error.message || 'An unknown error occurred.';
+        hideLoadingShowResult('app-form-loading', 'application-form-messages', `<p class="text-error">Error: ${displayMessage}</p>`);
+        window.showAlert('Error saving application: ' + displayMessage, 'error');
     }
 }
 
@@ -345,6 +408,15 @@ async function addApplication(event) {
  * @param {string} appId The ID of the application to edit.
  */
 function editApplication(appId) {
+    // IMPORTANT: Ensure appId is a string here. If it's an event, this indicates a problem
+    // with how the event listener is set up in renderApplications.
+    console.log("editApplication: Called with raw appId:", appId, "Type:", typeof appId);
+    if (typeof appId !== 'string' || !appId) {
+        console.error("editApplication: Invalid appId received. Expected string, got:", appId);
+        window.showAlert("Error: Invalid application ID for editing.", "error");
+        return;
+    }
+    console.log("editApplication: Valid appId received:", appId); // Debug log
     showAddApplicationForm(appId);
 }
 
@@ -354,6 +426,7 @@ function editApplication(appId) {
  * @param {string} newStatus The new status.
  */
 async function updateApplicationStatus(appId, newStatus) {
+    console.log("updateApplicationStatus: Updating app ID:", appId, "to status:", newStatus); // Debug log
     try {
         const response = await fetch(`/api/applications/${appId}/status`, {
             method: 'PUT',
@@ -363,14 +436,27 @@ async function updateApplicationStatus(appId, newStatus) {
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.detail || 'Failed to update application status.');
+            console.error("Backend error updating status:", errorData); // Log full error from backend
+            let errorMessage = 'Failed to update application status.';
+            if (errorData && errorData.detail) {
+                if (Array.isArray(errorData.detail) && errorData.detail.length > 0 && errorData.detail[0].msg) {
+                    errorMessage = errorData.detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join('; ');
+                } else if (typeof errorData.detail === 'string') {
+                    errorMessage = errorData.detail;
+                }
+            } else if (errorData.message) {
+                errorMessage = errorData.message;
+            } else {
+                errorMessage = JSON.stringify(errorData);
+            }
+            throw new Error(errorMessage);
         }
 
         window.showAlert('Application status updated!', 'success');
         loadApplications(); // Reload and re-render applications
         window.loadDashboardData(); // Reload dashboard data
     } catch (error) {
-        console.error('Error updating status:', error);
+        console.error('Error updating status (frontend catch):', error);
         window.showAlert('Error updating status: ' + error.message, 'error');
     }
 }
@@ -380,6 +466,7 @@ async function updateApplicationStatus(appId, newStatus) {
  * @param {string} appId The ID of the application to delete.
  */
 function deleteApplication(appId) {
+    console.log("deleteApplication: Deleting app ID:", appId); // Debug log
     window.showConfirm('Are you sure you want to delete this application?', async () => {
         try {
             const response = await fetch(`/api/applications/${appId}`, {
@@ -388,14 +475,27 @@ function deleteApplication(appId) {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.detail || 'Failed to delete application.');
+                console.error("Backend error deleting application:", errorData); // Log full error from backend
+                let errorMessage = 'Failed to delete application.';
+                if (errorData && errorData.detail) {
+                    if (Array.isArray(errorData.detail) && errorData.detail.length > 0 && errorData.detail[0].msg) {
+                        errorMessage = errorData.detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join('; ');
+                    } else if (typeof errorData.detail === 'string') {
+                        errorMessage = errorData.detail;
+                    }
+                } else if (errorData.message) {
+                    errorMessage = errorData.message;
+                } else {
+                    errorMessage = JSON.stringify(errorData);
+                }
+                throw new Error(errorMessage);
             }
 
             window.showAlert('Application deleted successfully!', 'success');
             loadApplications(); // Reload and re-render applications
             window.loadDashboardData(); // Reload dashboard data
         } catch (error) {
-            console.error('Error deleting application:', error);
+            console.error('Error deleting application (frontend catch):', error);
             window.showAlert('Error deleting application: ' + error.message, 'error');
         }
     });
@@ -406,9 +506,11 @@ function deleteApplication(appId) {
  * @param {string} appId The ID of the application to display.
  */
 async function showApplicationDetailModal(appId) {
-    const app = applications.find(a => a.id === appId);
+    console.log("showApplicationDetailModal: Viewing app ID:", appId); // Debug log
+    const app = applications.find(a => String(a.id) === String(appId)); // Ensure string comparison
     if (!app) {
         window.showAlert('Application not found.', 'error');
+        console.error("Application not found for detail modal with ID:", appId);
         return;
     }
 
@@ -434,8 +536,9 @@ async function showApplicationDetailModal(appId) {
 
     const modalCvFileName = document.getElementById('modal-cv-file-name');
     const modalCvFileLink = document.getElementById('modal-cv-file-link');
-    if (app.cv_file_name) {
-        modalCvFileName.textContent = app.cv_file_name;
+    if (app.cv_file) { // Check for cv_file path existence
+        const fileName = app.cv_file.split('/').pop(); // Extract filename from path
+        modalCvFileName.textContent = fileName;
         modalCvFileLink.href = `/api/applications/${app.id}/cv`; // Endpoint to download CV
         modalCvFileLink.style.display = 'inline';
         modalCvFileName.style.display = 'inline';

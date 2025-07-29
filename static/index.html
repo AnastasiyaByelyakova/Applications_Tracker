@@ -46,26 +46,32 @@
             <div id="add-application-form" class="form-section" style="display: none;">
                 <h3 id="application-form-title">Add New Application</h3> <!-- Added ID for dynamic title -->
                 <form id="application-form">
-                    <input type="hidden" id="application-id"> <!-- Added hidden input for application ID -->
+                    <!-- Added name="application_id" to the hidden input -->
+                    <input type="hidden" id="application-id" name="application_id">
                     <div class="form-group">
                         <label for="job-title">Job Title</label>
-                        <input type="text" id="job-title" required>
+                        <!-- Added name="job_title" -->
+                        <input type="text" id="job-title" name="job_title" required>
                     </div>
                     <div class="form-group">
                         <label for="company">Company</label>
-                        <input type="text" id="company" required>
+                        <!-- Added name="company" -->
+                        <input type="text" id="company" name="company" required>
                     </div>
                     <div class="form-group">
                         <label for="link">Application Link</label>
-                        <input type="url" id="link">
+                        <!-- Added name="link" -->
+                        <input type="url" id="link" name="link">
                     </div>
                     <div class="form-group">
                         <label for="application-date">Application Date</label>
-                        <input type="date" id="application-date">
+                        <!-- Added name="application_date" -->
+                        <input type="date" id="application-date" name="application_date">
                     </div>
                     <div class="form-group">
                         <label for="status">Status</label>
-                        <select id="status">
+                        <!-- Added name="status" -->
+                        <select id="status" name="status">
                             <option value="Applied">Applied</option>
                             <option value="Interview">Interview</option>
                             <option value="Rejection">Rejection</option>
@@ -74,17 +80,26 @@
                     </div>
                     <div class="form-group">
                         <label for="description">Job Description</label>
-                        <textarea id="description" rows="5"></textarea>
+                        <!-- Added name="description" -->
+                        <textarea id="description" name="description" rows="5"></textarea>
                     </div>
                     <div class="form-group">
                         <label for="cv-file">Upload CV (for this application)</label>
-                        <input type="file" id="cv-file" accept=".pdf,.doc,.docx">
+                        <!-- Added name="cv_file" -->
+                        <input type="file" id="cv-file" name="cv_file" accept=".pdf,.doc,.docx">
                         <span id="cv-file-name-display" style="display: none;"></span> <!-- To display selected/current CV file name -->
                     </div>
                     <div class="form-group">
                         <label for="cover-letter">Cover Letter Notes</label>
-                        <textarea id="cover-letter" rows="3"></textarea>
+                        <!-- Added name="cover_letter" -->
+                        <textarea id="cover-letter" name="cover_letter" rows="3"></textarea>
                     </div>
+                    <!-- NEW: Loading indicator and message display for the application form -->
+                    <div id="app-form-loading" class="loading-indicator" style="display: none;">
+                        <div class="spinner"></div> Saving...
+                    </div>
+                    <div id="application-form-messages" class="ai-result-box" style="display: none;"></div>
+
                     <button type="submit" class="btn btn-success" id="save-application-btn">Save Application</button> <!-- Added ID for dynamic text -->
                     <button type="button" class="btn btn-secondary" id="cancel-app-btn">Cancel</button>
                 </form>
@@ -657,14 +672,13 @@
         </div>
     </div>
 
-    <!-- Script imports for modularized JavaScript -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="/static/js/utils.js"></script>
+<!-- Script imports for modularized JavaScript -->
+    <script src="[https://cdn.jsdelivr.net/npm/marked/marked.min.js](https://cdn.jsdelivr.net/npm/marked/marked.min.js)"></script>
+    <script src="/static/js/utils.js"></script> <!-- utils.js MUST be loaded first -->
     <script src="/static/js/applications.js"></script>
     <script src="/static/js/profile.js"></script>
     <script src="/static/js/calendar.js"></script>
     <script src="/static/js/dashboard.js"></script>
-    <!-- IMPORTANT: ai_services_frontend.js must be loaded BEFORE app.js -->
     <script src="/static/js/ai_services_frontend.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
