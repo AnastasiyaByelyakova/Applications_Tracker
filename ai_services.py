@@ -226,7 +226,10 @@ class AIService:
                              chat_history: Optional[List[Dict]] = None, tools: Optional[List[Dict]] = None,
                              system_instruction: Optional[str] = None) -> str:
         if ai_provider == "gemini":
-            return await self._call_gemini_pro(prompt, api_key, tools=tools, system_instruction=system_instruction,
+            return self._call_gemini_pro(prompt,
+                                         api_key,
+                                         tools=tools,
+                                         system_instruction=system_instruction,
                                                chat_history=chat_history)
         elif ai_provider == "openai":
             return await self._call_openai(model_name, prompt, api_key, chat_history=chat_history, tools=tools,

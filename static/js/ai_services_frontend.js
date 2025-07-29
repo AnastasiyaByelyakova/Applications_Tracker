@@ -38,9 +38,23 @@ function getAiConfig(sectionIdPrefix) {
  * @param {string} resultId The ID of the result div.
  */
 function showLoading(loadingId, resultId) {
-    document.getElementById(loadingId).style.display = 'flex';
-    document.getElementById(resultId).style.display = 'none';
-    document.getElementById(resultId).innerHTML = ''; // Clear previous result
+    const loadingElement = document.getElementById(loadingId);
+    const resultElement = document.getElementById(resultId);
+
+    if (loadingElement) {
+        loadingElement.style.display = 'flex';
+    } else {
+        console.warn(`showLoading: Loading element with ID '${loadingId}' not found.`);
+        // Fallback or handle gracefully if element is null
+        return; // Prevent further errors if element is null
+    }
+
+    if (resultElement) {
+        resultElement.style.display = 'none';
+        resultElement.innerHTML = ''; // Clear previous result
+    } else {
+        console.warn(`showLoading: Result element with ID '${resultId}' not found.`);
+    }
 }
 
 /**
@@ -50,10 +64,21 @@ function showLoading(loadingId, resultId) {
  * @param {string} content The HTML content to put in the result div.
  */
 function hideLoadingShowResult(loadingId, resultId, content) {
-    document.getElementById(loadingId).style.display = 'none';
-    const resultDiv = document.getElementById(resultId);
-    resultDiv.innerHTML = content;
-    resultDiv.style.display = 'block';
+    const loadingElement = document.getElementById(loadingId);
+    const resultElement = document.getElementById(resultId);
+
+    if (loadingElement) {
+        loadingElement.style.display = 'none';
+    } else {
+        console.warn(`hideLoadingShowResult: Loading element with ID '${loadingId}' not found.`);
+    }
+
+    if (resultElement) {
+        resultElement.innerHTML = content;
+        resultElement.style.display = 'block';
+    } else {
+        console.warn(`hideLoadingShowResult: Result element with ID '${resultId}' not found.`);
+    }
 }
 
 /**
@@ -399,7 +424,9 @@ async function researchCompanyWebsite() {
         }
 
         const data = await response.json();
+        console.log('researchCompanyWebsite: Raw AI response data:', data); // Log the raw data
         const formattedResult = window.formatAiResultToHtml(data.result);
+        console.log('researchCompanyWebsite: Formatted result HTML:', formattedResult); // Log formatted HTML
         hideLoadingShowResult('company-research-loading', 'company-research-result', formattedResult);
         window.showAlert('Company research completed successfully!', 'success');
     } catch (error) {

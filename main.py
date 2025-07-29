@@ -470,7 +470,7 @@ async def research_company_website_ai(
         raise HTTPException(status_code=500, detail=f"AI company research failed: {e}")
 
 
-@app.post("/api/ai/generate-about-me", response_model=Dict[str, str])
+@app.post("/api/ai/about-me-answer", response_model=Dict[str, str])
 async def generate_about_me_answer_ai(
         job_description: Annotated[str, Form()],
         profile: Annotated[str, Form()],

@@ -337,6 +337,7 @@
                     <input type="text" id="api-key-qa" placeholder="Enter your AI provider API key">
                 </div>
                 <div class="chat-container">
+                    <!-- ADDED id="qa-chat-display" to the chat display area -->
                     <div id="qa-chat-display" class="chat-display">
                         <!-- Chat messages will appear here -->
                         <div class="chat-message bot-message">Hello! I'm your interview practice bot. Tell me a job title, and I'll ask you some questions.</div>
@@ -346,6 +347,7 @@
                         <button class="btn btn-primary btn-sm" id="qa-chat-send-btn">Send</button>
                     </div>
                 </div>
+                <!-- ADDED id="qa-loading" for the loading spinner -->
                 <div id="qa-loading" class="loading-indicator" style="display: none;">
                     <div class="spinner"></div> Thinking...
                 </div>
@@ -435,7 +437,7 @@
             <!-- Tuned "About Me" Answer -->
             <div id="ai-service-about-me-answer" class="ai-tool-section ai-service-page" style="display: none;">
                 <h3>Tuned "About Me" Answer</h3>
-                <p>Generate a compelling "Tell me about yourself" answer, tuned to a specific job description using your profile.</p>
+                <p>Generate a compelling "Tell me about yourself" (About Me) answer, tuned to a specific job description using your profile.</p>
                 <div class="form-group">
                     <label for="job-desc-about-me">Job Description</label>
                     <textarea id="job-desc-about-me" rows="8" placeholder="Paste the full job description here..."></textarea>
@@ -672,13 +674,14 @@
         </div>
     </div>
 
-<!-- Script imports for modularized JavaScript -->
-    <script src="[https://cdn.jsdelivr.net/npm/marked/marked.min.js](https://cdn.jsdelivr.net/npm/marked/marked.min.js)"></script>
-    <script src="/static/js/utils.js"></script> <!-- utils.js MUST be loaded first -->
+    <!-- Script imports for modularized JavaScript -->
+    <script src="//cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/js/utils.js"></script>
     <script src="/static/js/applications.js"></script>
     <script src="/static/js/profile.js"></script>
     <script src="/static/js/calendar.js"></script>
     <script src="/static/js/dashboard.js"></script>
+    <!-- IMPORTANT: ai_services_frontend.js must be loaded BEFORE app.js -->
     <script src="/static/js/ai_services_frontend.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
