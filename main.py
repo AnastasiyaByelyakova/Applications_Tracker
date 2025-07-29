@@ -434,7 +434,7 @@ async def extract_job_skills_ai(
         raise HTTPException(status_code=500, detail=f"AI skill extraction failed: {e}")
 
 
-@app.post("/api/ai/craft-interview-questions", response_model=Dict[str, str])
+@app.post("/api/ai/craft-questions", response_model=Dict[str, str])
 async def craft_interview_questions_ai(
         candidate_info: Annotated[str, Form()],
         ai_provider: Annotated[AIProvider, Form()],
