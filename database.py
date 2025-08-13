@@ -10,7 +10,7 @@ from models import JobApplication, UserProfile, Education, Experience, Skill, Ap
 class Database:
     def __init__(self):
         # Database connection details - replace with your PostgreSQL credentials
-        self.db_url = "postgresql://postgres:3141@localhost:5432/applications_tracker"
+        self.db_url = "postgresql://neondb_owner:npg_izNwFDGkJ1l2@ep-summer-sky-adlj4649-pooler.c-2.us-east-1.aws.neon.tech/application_tracker?sslmode=require&channel_binding=require"
         self.pool = None
 
     async def connect(self):

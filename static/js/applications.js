@@ -233,10 +233,32 @@ async function showAddApplicationForm(appId = null) {
 
         const app = applications.find(a => String(a.id) === String(validatedAppId)); // Ensure string comparison
         if (app) {
+            console.log("Editing application. app.application_date:", app.application_date); // Debug log for date value
+
+            // ** Start of added debug logs and date formatting **
+            console.log("Before parsing app.application_date:", app.application_date);
+            const dateObj = new Date(app.application_date);
+            console.log("After parsing to Date object:", dateObj);
+
+            // Check if the dateObj is valid
+            if (!isNaN(dateObj.getTime())) {
+                const year = dateObj.getFullYear();
+                const month = String(dateObj.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+                const day = String(dateObj.getDate()).padStart(2, '0');
+                const formattedDate = `${year}-${month}-${day}`;
+                console.log("Formatted date (YYYY-MM-DD):", formattedDate);
+
+                console.log("Before setting application-date input value to:", formattedDate);
+                document.getElementById('application-date').value = formattedDate;
+                console.log("After setting application-date input value.");
+            } else {
+                console.error("Invalid date received from backend:", app.application_date);
+                document.getElementById('application-date').value = ''; // Clear the input if date is invalid
+            }
+            // ** End of added debug logs and date formatting **
             document.getElementById('job-title').value = app.job_title || '';
             document.getElementById('company').value = app.company || '';
             document.getElementById('link').value = app.link || '';
-            document.getElementById('application-date').value = app.application_date || '';
             document.getElementById('status').value = app.status || 'Applied';
             document.getElementById('description').value = app.description || '';
             document.getElementById('cover-letter').value = app.cover_letter_notes || '';
@@ -264,6 +286,23 @@ async function showAddApplicationForm(appId = null) {
         console.log("showAddApplicationForm: Adding new app, clearing application-id to:", appIdInput.value); // Debug log
         document.getElementById('application-form').reset(); // Clear form fields
         cvFileNameDisplay.textContent = '';
+        // ** Start of added code to pre-fill date **
+        // Only pre-fill date for new applications (when appId is null)
+        if (!validatedAppId) { // Use validatedAppId here as well
+            // Get today's date
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+            const day = String(today.getDate()).padStart(2, '0');
+            const formattedDate = `${year}-${month}-${day}`;
+
+            // Set the value of the application date input
+            const applicationDateInput = document.getElementById('application-date');
+            if (applicationDateInput) {
+                applicationDateInput.value = formattedDate;
+            }
+        }
+        // ** End of added code **
         cvFileNameDisplay.style.display = 'none';
     }
 }

@@ -39,15 +39,15 @@ async def lifespan(app: FastAPI):
 # Initialize FastAPI app with lifespan
 app = FastAPI(lifespan=lifespan)
 # Mount static files (HTML, CSS, JS)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")  # Mount uploads directory
+app.mount("/static", StaticFiles(directory="/home/user/applicationstracker/Applications_Tracker/static"), name="static")
+app.mount("/uploads", StaticFiles(directory="/home/user/applicationstracker/Applications_Tracker/uploads"), name="uploads")  # Mount uploads directory
 
 
 # Root endpoint to serve the HTML application
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
     """Serves the main HTML page of the application."""
-    return FileResponse("static/index.html")
+    return FileResponse("/home/user/applicationstracker/Applications_Tracker/static/index.html")
 
 
 # API Endpoints
@@ -559,5 +559,5 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
