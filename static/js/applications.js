@@ -45,6 +45,8 @@ async function fetchApplications() {
  */
 async function loadApplications() {
     await fetchApplications(); // Fetch the latest data
+    // Sort by application_date in descending order by default
+    applications.sort((a, b) => new Date(b.application_date) - new Date(a.application_date));
     filterAndRenderApplications(); // Apply current filters/sort and render
 }
 
@@ -465,38 +467,41 @@ function editApplication(appId) {
  * @param {string} newStatus The new status.
  */
 async function updateApplicationStatus(appId, newStatus) {
-    console.log("updateApplicationStatus: Updating app ID:", appId, "to status:", newStatus); // Debug log
+    const app = applications.find(a => String(a.id) === String(appId));
+    if (!app) {
+        window.showAlert('Application not found.', 'error');
+        return;
+    }
+
+    // Create a FormData object to send
+    const formData = new FormData();
+    formData.append('job_title', app.job_title);
+    formData.append('company', app.company);
+    formData.append('application_date', app.application_date.split('T')[0]); // Send date in YYYY-MM-DD format
+    formData.append('status', newStatus);
+    formData.append('description', app.description || '');
+    formData.append('link', app.link || '');
+    formData.append('cover_letter', app.cover_letter || '');
+
     try {
-        const response = await fetch(`/api/applications/${appId}/status`, {
+        const response = await fetch(`/api/applications/${appId}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: newStatus })
+            body: formData
         });
 
         if (!response.ok) {
             const errorData = await response.json();
-            console.error("Backend error updating status:", errorData); // Log full error from backend
-            let errorMessage = 'Failed to update application status.';
-            if (errorData && errorData.detail) {
-                if (Array.isArray(errorData.detail) && errorData.detail.length > 0 && errorData.detail[0].msg) {
-                    errorMessage = errorData.detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join('; ');
-                } else if (typeof errorData.detail === 'string') {
-                    errorMessage = errorData.detail;
-                }
-            } else if (errorData.message) {
-                errorMessage = errorData.message;
-            } else {
-                errorMessage = JSON.stringify(errorData);
-            }
-            throw new Error(errorMessage);
+            throw new Error(errorData.detail || 'Failed to update status.');
         }
 
         window.showAlert('Application status updated!', 'success');
-        loadApplications(); // Reload and re-render applications
-        window.loadDashboardData(); // Reload dashboard data
+        await loadApplications(); // Reload applications to reflect changes
+        window.loadDashboardData(); // Update dashboard data as well
     } catch (error) {
-        console.error('Error updating status (frontend catch):', error);
+        console.error('Error updating status:', error);
         window.showAlert('Error updating status: ' + error.message, 'error');
+        // Optionally, revert the select dropdown on failure
+        loadApplications();
     }
 }
 

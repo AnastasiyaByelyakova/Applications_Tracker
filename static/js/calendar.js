@@ -370,9 +370,9 @@ async function saveInterview() {
         return;
     }
 
-    // Combine date and time into full datetime strings
-    const startDatetime = `${interviewDate}T${startTime}:00`;
-    const endDatetime = `${interviewDate}T${endTime}:00`;
+    // Combine date and time into full ISO 8601 datetime strings
+    const startDatetime = new Date(`${interviewDate}T${startTime}`).toISOString();
+    const endDatetime = new Date(`${interviewDate}T${endTime}`).toISOString();
 
     // Client-side overlap check
     const newStart = new Date(startDatetime);

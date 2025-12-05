@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from datetime import datetime, timezone  # Import timezone
+from datetime import datetime, timezone
 from enum import Enum
 
 class ApplicationStatus(str, Enum):
@@ -20,14 +20,12 @@ class JobApplication(BaseModel):
     id: Optional[str] = None
     job_title: str
     company: str
-    description: Optional[str] = None  # Made optional as it might be empty
-    link: Optional[str] = None  # Made optional as it might be empty
-    # Use datetime.utcnow() for consistent UTC timestamps
+    description: Optional[str] = None
+    link: Optional[str] = None
     application_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     status: ApplicationStatus = ApplicationStatus.APPLIED
     cv_file: Optional[str] = None
     cover_letter: Optional[str] = None
-    # Use datetime.utcnow() for consistent UTC timestamps
     last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Config:
@@ -51,7 +49,7 @@ class Experience(BaseModel):
 
 class Skill(BaseModel):
     name: str
-    level: str  # Beginner, Intermediate, Advanced, Expert
+    level: str
 
 
 class UserProfile(BaseModel):
@@ -75,8 +73,8 @@ class UserProfile(BaseModel):
 class Interview(BaseModel):
     id: Optional[str] = None
     interview_title: str
-    start_datetime: datetime
-    end_datetime: datetime
+    start_datetime: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    end_datetime: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     location: Optional[str] = None
     notes: Optional[str] = None
     interview_type: Optional[str] = None
@@ -85,4 +83,4 @@ class Interview(BaseModel):
         json_encoders = {
             datetime: lambda dt: dt.isoformat()
         }
-        from_attributes = True  # Use from_attributes instead of orm_mode for Pydantic v2
+        from_attributes = True
