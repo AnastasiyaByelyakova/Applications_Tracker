@@ -521,8 +521,7 @@ async function fillProfileFromResumeAI() {
             throw new Error(errorData.detail || 'Failed to fill profile from resume.');
         }
 
-        const data = await response.json();
-        const profileData = data.profile; // The backend returns the saved profile
+        const profileData = await response.json();
 
         // Update the frontend profile object and re-render the profile tab
         window.profile = profileData;

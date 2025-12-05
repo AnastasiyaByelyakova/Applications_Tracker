@@ -231,39 +231,26 @@ async def get_user_profile():
     return profile
 
 
-@app.post("/api/profile/cv", response_model=UserProfile)
-async def upload_profile_cv(cv_file: UploadFile = File(...)):
-    """Uploads a master CV file for the user's profile."""
-    if not cv_file.filename:
+@app.post("/api/profile/upload-cv", response_model=dict)
+async def upload_profile_cv(file: UploadFile = File(...)):
+    """Uploads a master CV file for the user's profile and returns the file path."""
+    if not file.filename:
         raise HTTPException(status_code=400, detail="No file uploaded.")
 
-    # Define a fixed path for the master CV, overwriting if exists
-    cv_file_path = os.path.join(UPLOAD_DIR, "master_cv.pdf")  # Or use a unique name if multiple master CVs are allowed
-
-    # Ensure the uploads directory exists
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    file_extension = os.path.splitext(file.filename)[1]
+    unique_filename = f"master_cv_{datetime.now().strftime('%Y%m%d%H%M%S')}{file_extension}"
+    cv_file_path = os.path.join(UPLOAD_DIR, unique_filename)
 
     try:
         with open(cv_file_path, "wb") as buffer:
-            content = await cv_file.read()
+            content = await file.read()
             buffer.write(content)
         print(f"Master CV file saved to: {cv_file_path}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload master CV file: {e}")
 
-    # Update the user profile with the new CV file path
-    existing_profile = await db.get_user_profile()
-    if existing_profile:
-        existing_profile.cv_profile_file = cv_file_path
-        updated_profile = await db.save_user_profile(existing_profile)  # Use save to update
-    else:
-        # If no profile exists, create a minimal one with just the CV file
-        new_profile = UserProfile(cv_profile_file=cv_file_path, full_name="Guest User")  # Add a default name
-        updated_profile = await db.save_user_profile(new_profile)
-
-    if not updated_profile:
-        raise HTTPException(status_code=500, detail="Failed to update user profile with CV file path.")
-    return updated_profile
+    # Here, we just return the path. The frontend will then use this path to update the profile.
+    return {"path": cv_file_path}
 
 
 # Interview Endpoints
